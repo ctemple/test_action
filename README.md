@@ -146,16 +146,28 @@ Claude Code CLI (DeepSeek 兼容端点)
 ```
 .
 ├── .github/
-│   └── workflows/
-│       ├── ai-auto-fix.yml             # AI 自动修复
-│       ├── ai-code-review.yml          # AI 代码审查
-│       ├── ai-fix-review.yml           # AI 修复审查意见
-│       └── ai-issue-triage.yml         # AI 自动分类
+│   ├── workflows/
+│   │   ├── ai-issue-triage.yml         # AI 自动分类
+│   │   ├── ai-clarify.yml              # AI 需求澄清
+│   │   ├── ai-auto-fix.yml             # AI 自动修复
+│   │   ├── ai-code-review.yml          # AI 代码审查
+│   │   └── ai-fix-review.yml           # AI 修复审查意见
+│   ├── ISSUE_TEMPLATE/
+│   │   └── ai_bug_fix.yml
+│   └── PULL_REQUEST_TEMPLATE.md
 ├── README.md
+├── cli.py
+├── pyproject.toml
 └── .gitignore
 ```
 
-> Python 脚本 (`ai_client.py` 等) 保留在 `scripts/` 目录供本地参考，但 workflow 已不再使用。
+核心工作流文件：
+
+- [`.github/workflows/ai-issue-triage.yml`](.github/workflows/ai-issue-triage.yml) — AI 自动分类
+- [`.github/workflows/ai-clarify.yml`](.github/workflows/ai-clarify.yml) — AI 需求澄清
+- [`.github/workflows/ai-auto-fix.yml`](.github/workflows/ai-auto-fix.yml) — AI 自动修复
+- [`.github/workflows/ai-code-review.yml`](.github/workflows/ai-code-review.yml) — AI 代码审查
+- [`.github/workflows/ai-fix-review.yml`](.github/workflows/ai-fix-review.yml) — AI 修复审查意见
 
 ---
 
