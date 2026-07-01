@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🤖 AI Workflow 部署指南 — Claude Code CLI + DeepSeek</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --border: #30363d;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --accent: #7b68ee;
+    --green: #3fb950;
+    --red: #f85149;
+    --orange: #d2991d;
+    --blue: #58a6ff;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.6;
+    max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem;
+  }
+  h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+  h1 span { font-size: 1.2rem; color: var(--muted); display: block; font-weight: normal; }
+  h2 { font-size: 1.4rem; margin: 2.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
+  h3 { font-size: 1.1rem; margin: 1.5rem 0 0.8rem; }
+  p, li { margin-bottom: 0.5rem; }
+  a { color: var(--blue); }
+
+  .arch { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin: 1.5rem 0; overflow-x: auto; }
+  .arch pre { font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.85rem; line-height: 1.7; white-space: pre; }
+
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem 1.5rem; margin: 1rem 0; }
+  .card h3 { margin-top: 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
+  th, td { padding: 0.6rem 0.8rem; text-align: left; border-bottom: 1px solid var(--border); }
+  th { background: var(--card); font-weight: 600; }
+
+  code { background: #1c2129; padding: 0.15em 0.4em; border-radius: 3px; font-size: 0.9em; font-family: 'JetBrains Mono', monospace; }
+  pre { background: #1c2129; padding: 1rem 1.2rem; border-radius: 6px; overflow-x: auto; font-size: 0.85rem; border: 1px solid var(--border); }
+  pre code { background: none; padding: 0; }
+
+  .tag { display: inline-block; padding: 0.15em 0.5em; border-radius: 4px; font-size: 0.8em; font-weight: bold; margin-right: 0.3em; }
+  .tag-ok { background: #1b3a1b; color: var(--green); }
+  .tag-err { background: #3a1b1b; color: var(--red); }
+  .tag-warn { background: #3a301b; color: var(--orange); }
+  .tag-fix { background: #1b2a3a; color: var(--blue); }
+
+  .err-box { background: #1f1313; border-left: 3px solid var(--red); padding: 0.8rem 1rem; margin: 0.8rem 0; border-radius: 0 6px 6px 0; }
+  .fix-box { background: #131f1f; border-left: 3px solid var(--green); padding: 0.8rem 1rem; margin: 0.8rem 0; border-radius: 0 6px 6px 0; }
+  .err-box code, .fix-box code { background: rgba(255,255,255,0.05); }
+
+  .step-num { display: inline-block; width: 28px; height: 28px; line-height: 28px;
+    text-align: center; border-radius: 50%; background: var(--accent); color: #fff;
+    font-weight: bold; font-size: 0.85em; margin-right: 0.5rem; }
+
+  .toc { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem 1.5rem; margin: 1.5rem 0; }
+  .toc ol { padding-left: 1.5rem; }
+  .toc li { margin: 0.3rem 0; }
+
+  .checklist { list-style: none; padding: 0; }
+  .checklist li { padding: 0.3rem 0; }
+  .checklist li::before { content: '☐ '; color: var(--muted); }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+  @media (max-width: 640px) {
+    body { padding: 1rem; }
+    pre { font-size: 0.75rem; padding: 0.6rem; }
+    table { font-size: 0.85rem; }
+  }
+</style>
+</head>
+<body>
+
+<h1>🤖 AI-Powered GitHub Workflows <span>部署指南 · Claude Code CLI + DeepSeek</span></h1>
+
+<p style="margin-top:1rem; color:var(--muted);">
+  在 60 分钟内，为任何 GitHub 仓库添加全自动 AI 工作流：
+  Issue → AI 写代码 → PR → AI 审查 → 修复 → 重新审查。
+  全程零人工干预。
+</p>
+
+<!-- ================================================================== -->
+<h2>📑 目录</h2>
+<div class="toc">
+<ol>
+  <li><a href="#overview">架构概览</a></li>
+  <li><a href="#prereqs">前置条件</a></li>
+  <li><a href="#secrets">配置 Secrets</a></li>
+  <li><a href="#deploy">部署文件</a></li>
+  <li><a href="#errors">错误排查（10 个常见问题）</a></li>
+  <li><a href="#verify">验证全链路</a></li>
+  <li><a href="#checklist">部署检查清单</a></li>
+</ol>
+</div>
+
+<!-- ================================================================== -->
+<h2 id="overview">1. 架构概览</h2>
+
+<div class="arch">
+<pre>
+                    📝 Issue 创建
+                         │
+            ┌────────────┼────────────┐
+            ▼            ▼            ▼
+       🏷️ AI Triage  🔧 AI Auto-Fix  🔍 AI Code Review
+       (自动分类)    (写代码→PR)    (审查PR代码)
+                         │                 │
+                         ▼                 │
+                   📥 Pull Request         │
+                         │                 │
+                         ▼                 │
+                   🔍 AI Review           │
+                   (自动审查)             │
+                         │                 │
+                    ┌────┴────┐            │
+                    ▼         ▼            │
+                  ✅ 通过   ❌ 不通过      │
+                    │         │            │
+                    │         ▼            │
+                    │    🔧 AI Fix Review  │
+                    │    (修复→推送)       │
+                    │         │            │
+                    └─────────┘            │
+                         │                 │
+                         └── 审查→修复循环 ─┘
+</pre>
+</div>
+
+<div class="card">
+<h3>执行引擎</h3>
+<pre><code>Claude Code CLI (npm: @anthropic-ai/claude-code)
+    │
+    ├── 📖 Read     读取文件
+    ├── ✏️ Edit     精确替换代码
+    ├── 📝 Write    创建新文件
+    ├── 🔍 Glob     文件搜索
+    ├── 🔎 Grep     内容搜索
+    └── 💻 Bash     执行 git / gh 命令</code></pre>
+<p style="margin-top:0.5rem; color:var(--muted);">
+  <strong>不需要 Python 脚本！</strong> Claude Code CLI 通过 Read/Write/Edit/Bash 工具自主完成任务。
+  GitHub Actions 只需安装 CLI 并传入 prompt。
+</p>
+</div>
+
+<!-- ================================================================== -->
+<h2 id="prereqs">2. 前置条件</h2>
+
+<div class="card">
+<h3>2.1 DeepSeek API Key</h3>
+<ol>
+  <li>访问 <a href="https://platform.deepseek.com/" target="_blank">platform.deepseek.com</a></li>
+  <li>注册并获取 API Key（<code>sk-xxxxxxxx</code>）</li>
+</ol>
+</div>
+
+<div class="card">
+<h3>2.2 GitHub Personal Access Token (PAT)</h3>
+<ol>
+  <li>打开 <a href="https://github.com/settings/tokens" target="_blank">github.com/settings/tokens</a></li>
+  <li>Generate new token → <strong>Fine-grained token</strong></li>
+  <li>选择目标仓库</li>
+  <li>权限（必须全部勾选）：</li>
+</ol>
+<table>
+  <tr><th>权限</th><th>级别</th><th>用途</th></tr>
+  <tr><td><code>Contents</code></td><td>Read and write</td><td>创建分支、提交代码</td></tr>
+  <tr><td><code>Pull requests</code></td><td>Read and write</td><td>创建 PR、提交 Review</td></tr>
+  <tr><td><code>Issues</code></td><td>Read and write</td><td>Issue 评论、添加标签</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h3>2.3 仓库设置</h3>
+<p>仓库 <strong>Settings → Actions → General → Workflow permissions</strong>：</p>
+<ul>
+  <li>✅ <strong>Allow GitHub Actions to create and approve pull requests</strong></li>
+  <li>✅ 选择 <strong>Read and write permissions</strong></li>
+</ul>
+</div>
+
+<!-- ================================================================== -->
+<h2 id="secrets">3. 配置 Secrets</h2>
+
+<div class="card">
+<p>仓库 <strong>Settings → Secrets and variables → Actions → New repository secret</strong>：</p>
+
+<table>
+  <tr><th>Name</th><th>Value</th><th>说明</th></tr>
+  <tr>
+    <td><code>ANTHROPIC_BASE_URL</code></td>
+    <td><code>https://api.deepseek.com/anthropic</code></td>
+    <td>DeepSeek Anthropic 兼容端点</td>
+  </tr>
+  <tr>
+    <td><code>ANTHROPIC_AUTH_TOKEN</code></td>
+    <td><code>sk-你的密钥</code></td>
+    <td>DeepSeek API Key ⚠️ 敏感</td>
+  </tr>
+  <tr>
+    <td><code>ANTHROPIC_MODEL</code></td>
+    <td><code>deepseek-v4-pro[1m]</code></td>
+    <td>默认模型</td>
+  </tr>
+  <tr>
+    <td><code>ANTHROPIC_DEFAULT_HAIKU_MODEL</code></td>
+    <td><code>deepseek-v4-flash</code></td>
+    <td>轻量模型（分类任务）</td>
+  </tr>
+  <tr>
+    <td><code>ANTHROPIC_DEFAULT_OPUS_MODEL</code></td>
+    <td><code>deepseek-v4-pro[1m]</code></td>
+    <td>强力模型</td>
+  </tr>
+  <tr>
+    <td><code>GH_PAT</code></td>
+    <td><code>github_pat_你的PAT</code></td>
+    <td>GitHub PAT ⚠️ 敏感</td>
+  </tr>
+</table>
+
+<p style="color:var(--orange); font-size:0.9em;">
+  ⚠️ <strong>Secret 命名必须完全一致</strong>，包括大小写和下划线。
+</p>
+</div>
+
+<!-- ================================================================== -->
+<h2 id="deploy">4. 部署文件</h2>
+
+<div class="card">
+<h3>4.1 目录结构</h3>
+<pre><code>.github/
+└── workflows/
+    ├── ai-auto-fix.yml          ← AI 自动修复 Issue → PR
+    ├── ai-code-review.yml       ← AI 自动审查 PR
+    ├── ai-fix-review.yml        ← AI 修复审查意见（闭环）
+    └── ai-issue-triage.yml      ← AI 自动分类新 Issue</code></pre>
+</div>
+
+<div class="card">
+<h3>4.2 四步部署</h3>
+
+<p><span class="step-num">1</span> 创建 <code>.github/workflows/</code> 目录</p>
+<pre><code>mkdir -p .github/workflows</code></pre>
+
+<p style="margin-top:1rem;"><span class="step-num">2</span> 复制以下 4 个文件到该目录：</p>
+<table>
+  <tr><th>文件</th><th>功能</th><th>触发条件</th></tr>
+  <tr>
+    <td><a href="#wf1"><code>ai-auto-fix.yml</code></a></td>
+    <td>AI 写代码 → PR</td>
+    <td>Issue 打 <code>ai-fix</code> 标签 / 评论 <code>/ai-fix</code></td>
+  </tr>
+  <tr>
+    <td><a href="#wf2"><code>ai-code-review.yml</code></a></td>
+    <td>AI 审查 PR</td>
+    <td>PR 创建/更新 / 评论 <code>/ai-review</code></td>
+  </tr>
+  <tr>
+    <td><a href="#wf3"><code>ai-fix-review.yml</code></a></td>
+    <td>修复→审查循环</td>
+    <td>AI Review REQUEST_CHANGES / 评论 <code>/ai-fix-review</code></td>
+  </tr>
+  <tr>
+    <td><a href="#wf4"><code>ai-issue-triage.yml</code></a></td>
+    <td>自动分类</td>
+    <td>新 Issue 创建</td>
+  </tr>
+</table>
+
+<p style="margin-top:1rem;"><span class="step-num">3</span> 在仓库创建 <code>ai-fix</code> 标签：</p>
+<pre><code>gh label create ai-fix --color "7B68EE" --description "AI 自动修复"</code></pre>
+
+<p style="margin-top:1rem;"><span class="step-num">4</span> Push 到 GitHub：</p>
+<pre><code>git add .github/workflows/ && git commit -m "feat: add AI workflows" && git push</code></pre>
+</div>
+
+<!-- Workflow 1 -->
+<div class="card" id="wf1">
+<h3>📄 ai-auto-fix.yml</h3>
+<pre><code>name: 🤖 AI Auto-Fix Issue
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  ai-fix:
+    if: |
+      (github.event.action == 'labeled' && github.event.label.name == 'ai-fix') ||
+      (github.event.action == 'created' &&
+       github.event.comment.body == '/ai-fix' &&
+       github.event.comment.user.type != 'Bot' &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'))
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+      ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_HAIKU_MODEL }}
+      ANTHROPIC_DEFAULT_OPUS_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_OPUS_MODEL }}
+      CLAUDE_CODE_DISABLE_1M_CONTEXT: "0"
+      GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+
+      - run: npm install -g @anthropic-ai/claude-code
+
+      - run: |
+          git config user.name "🤖 AI Bot"
+          git config user.email "ai-bot@github-actions.com"
+
+      - id: issue
+        run: |
+          if [ "${{ github.event_name }}" = "issues" ]; then
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 🤖 AI Auto-Fix
+        env:
+          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+        run: |
+          claude -p "
+          Read GitHub issue #$ISSUE_NUMBER using gh issue view.
+          Analyze the issue, search the codebase with Glob/Grep,
+          read relevant files, implement the fix using Edit/Write.
+          Before committing, review your changes with git diff.
+          Then: create branch ai/fix-issue-$ISSUE_NUMBER,
+          commit with conventional commits message, push,
+          create PR with gh pr create, and comment on the issue.
+          " --allowedTools "Read,Write,Edit,Bash(git:*),Bash(gh:*),Glob,Grep" \
+            --output-format text --verbose
+
+      - if: failure()
+        run: |
+          gh issue comment ${{ steps.issue.outputs.number }} \
+            --repo ${{ github.repository }} \
+            --body "❌ AI 修复遇到问题，查看 [日志](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"</code></pre>
+</div>
+
+<!-- Workflow 2 -->
+<div class="card" id="wf2">
+<h3>📄 ai-code-review.yml</h3>
+<pre><code>name: 🤖 AI Code Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  ai-review:
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request_review_comment' &&
+       github.event.comment.body == '/ai-review' &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'))
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+      ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_HAIKU_MODEL }}
+      ANTHROPIC_DEFAULT_OPUS_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_OPUS_MODEL }}
+      CLAUDE_CODE_DISABLE_1M_CONTEXT: "0"
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm install -g @anthropic-ai/claude-code
+
+      - id: pr
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          claude -p "
+          Review PR #$PR_NUMBER. Get the diff with gh pr diff.
+          Check for: bugs, security issues, performance problems,
+          code style, missing tests, documentation gaps.
+          Write review to /tmp/review.md with severity levels
+          (CRITICAL/HIGH/MEDIUM/LOW/SUGGESTION).
+          Submit using gh pr review with appropriate verdict
+          (APPROVE/COMMENT/REQUEST_CHANGES).
+          Skip PRs with title starting with 🤖.
+          " --allowedTools "Read,Bash(gh:*),Bash(git:*),Write" \
+            --output-format text --verbose
+
+      - if: failure()
+        run: |
+          gh pr comment ${{ steps.pr.outputs.number }} \
+            --repo ${{ github.repository }} \
+            --body "❌ AI 审查遇到问题，查看 [日志](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})"</code></pre>
+</div>
+
+<!-- Workflow 3 -->
+<div class="card" id="wf3">
+<h3>📄 ai-fix-review.yml</h3>
+<pre><code>name: 🤖 AI Fix Review
+
+on:
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  fix-review:
+    if: |
+      (github.event_name == 'pull_request_review' &&
+       github.event.review.state == 'changes_requested') ||
+      (github.event_name == 'issue_comment' &&
+       github.event.comment.body == '/ai-fix-review' &&
+       contains(github.event.issue.pull_request, 'true') &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'))
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+      ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_HAIKU_MODEL }}
+      ANTHROPIC_DEFAULT_OPUS_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_OPUS_MODEL }}
+      CLAUDE_CODE_DISABLE_1M_CONTEXT: "0"
+      GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm install -g @anthropic-ai/claude-code
+      - run: |
+          git config user.name "🤖 AI Bot"
+          git config user.email "ai-bot@github-actions.com"
+
+      - id: pr
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request_review" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          claude -p "
+          PR #$PR_NUMBER has AI review requesting changes.
+          Read the AI review findings, fix CRITICAL and HIGH issues only.
+          Switch to the PR branch, apply fixes, commit and push.
+          Max 2 rounds total. Comment on PR with fix summary.
+          " --allowedTools "Read,Write,Edit,Bash(git:*),Bash(gh:*),Glob,Grep" \
+            --output-format text --verbose</code></pre>
+</div>
+
+<!-- Workflow 4 -->
+<div class="card" id="wf4">
+<h3>📄 ai-issue-triage.yml</h3>
+<pre><code>name: 🤖 AI Issue Triage
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+      ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_HAIKU_MODEL }}
+      ANTHROPIC_DEFAULT_OPUS_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_OPUS_MODEL }}
+      CLAUDE_CODE_DISABLE_1M_CONTEXT: "0"
+      GH_TOKEN: ${{ github.token }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm install -g @anthropic-ai/claude-code
+
+      - run: |
+          claude -p "
+          Read issue #$ISSUE_NUMBER with gh issue view.
+          Classify: bug|enhancement|question|documentation.
+          Assess priority: P0|P1|P2|P3.
+          Add labels (create if needed), comment with classification.
+          If it's simple and clearly described, add ai-fix label.
+          Skip bot-created issues and already-labeled issues.
+          " --allowedTools "Read,Bash(gh:*)" --output-format text --verbose</code></pre>
+</div>
+
+<!-- ================================================================== -->
+<h2 id="errors">5. 错误排查</h2>
+
+<p>以下是在本仓库实战中遇到的所有错误及其修复方案。</p>
+
+<!-- Error 1 -->
+<div class="err-box">
+<h3>❌ <span class="tag tag-err">ERROR</span> Author identity unknown</h3>
+<pre><code>*** Please tell me who you are.
+git commit 失败：没有配置 git 用户身份</code></pre>
+</div>
+<div class="fix-box">
+<h3>✅ <span class="tag tag-fix">FIX</span></h3>
+<p>在 workflow 中添加 git config：</p>
+<pre><code>- run: |
+    git config user.name "🤖 AI Bot"
+    git config user.email "ai-bot@github-actions.com"</code></pre>
+</div>
+
+<!-- Error 2 -->
+<div class="err-box">
+<h3>❌ <span class="tag tag-err">ERROR</span> GitHub Actions is not permitted to create pull requests</h3>
+<pre><code>GraphQL: GitHub Actions is not permitted to create or approve
+pull requests (createPullRequest)</code></pre>
+</div>
+<div class="fix-box">
+<h3>✅ <span class="tag tag-fix">FIX</span></h3>
+<p>仓库 <strong>Settings → Actions → General → Workflow permissions</strong>：<br>
+✅ 勾选 <strong>"Allow GitHub Actions to create and approve pull requests"</strong></p>
+</div>
+
+<!-- Error 3 -->
+<div class="err-box">
+<h3>❌ <span class="tag tag-err">ERROR</span> PR 触发下游 Workflow 需要手动审批</h3>
+<pre><code>This workflow is awaiting approval from a maintainer</code></pre>
+</div>
+<div class="fix-box">
+<h3>✅ <span class="tag tag-fix">FIX</span></h3>
+<p><code>GITHUB_TOKEN</code> 创建的 PR 被 GitHub 视为外部贡献。<br>
+用 <code>GH_PAT</code>（Personal Access Token）代替 <code>GITHUB_TOKEN</code>。</p>
+<pre><code>env:
+  GH_TOKEN: ${{ secrets.GH_PAT || github.token }}</code></pre>
+<p>确保 PAT 权限: <code>Contents: R/W</code> + <code>Pull requests: R/W</code> + <code>Issues: R/W</code></p>
+</div>
+
+<!-- Error 4 -->
+<div class="err-box">
+<h3>❌ <span class="tag tag-err">ERROR</span> Resource not accessible by personal access token</h3>
+<pre><code>GraphQL: Resource not accessible by personal access token (addComment)</code></pre>
+</div>
+<div class="fix-box">
+<h3>✅ <span class="tag tag-fix">FIX</span></h3>
+<p>PAT 缺少 <code>Issues: Read and write</code> 权限。<br>
+去 <a href="https://github.com/settings/tokens">Settings → Tokens</a> 编辑 PAT 添加此权限。</p>
+</div>
+
+<!-- Error 5 -->
+<div class="err-box">
+<h3>❌ <span class="tag tag-err">ERROR</span> failed to push some refs — 分支冲突</h3>
+<pre><code>error: failed to push some refs
+hint: Updates were rejected because the tip of your current
+branch is behind</code></pre>
+</div>
+<div class="fix-box">
+<h3>✅ <span class="tag tag-fix">FIX</span></h3>
+<p>上次运行失败残留的分支导致冲突。push 前清理旧分支：</p>
+<pre><code>git push origin --delete ai/fix-issue-N 2>/dev/null || true</code></pre>
+<p>（Claude Code CLI 会自动处理此情况，如果用 Python 脚本则需要手动加清理逻辑）</p>
+</div>
+
+<!-- Error 6 -->
+<div class="err-box">
+<h3>❌ <span class="tag tag-err">ERROR</span> AI 返回的 JSON 解析失败（缺少外层 {}）</h3>
+<pre><code>Pass 1 响应解析失败
+原始响应: "analysis": "...", "files_to_modify": [...]</code></pre>
+</div>
+<div class="fix-box">
+<h3>✅ <span class="tag tag-fix">FIX</span></h3>
+<p>AI 有时输出 JSON 忘记外层 <code>{}</code>。自动补全：</p>
+<pre><code>if not stripped.startswith('{'):
+    wrapped = '{' + stripped + '}'</code></pre>
+<p>（用 Claude Code CLI 后不再有此问题——它直接操作文件而非输出 JSON）</p>
+</div>
+
+<!-- Error 7 -->
+<div class="err-box">
+<h3>❌ <span class="tag tag-err">ERROR</span> JSON 字符串内未转义换行符</h3>
+<pre><code>change_description 字段包含真实换行符 → JSON 解析失败</code></pre>
+</div>
+<div class="fix-box">
+<h3>✅ <span class="tag tag-fix">FIX</span></h3>
+<p>方案 A: Prompt 中要求 <code>换行用 \\n 转义</code><br>
+方案 B: 解析前自动转义字符串内的换行符</p>
+<pre><code>if in_string and ch == '\n':
+    result.append('\\n')</code></pre>
+<p>（用 Claude Code CLI 后不再有此问题）</p>
+</div>
+
+<!-- Error 8 -->
+<div class="err-box">
+<h3>❌ <span class="tag tag-err">ERROR</span> original_snippet 与文件内容不匹配</h3>
+<pre><code>AI 生成的 replace 代码片段是猜的，实际文件内容不同 → 修改失败</code></pre>
+</div>
+<div class="fix-box">
+<h3>✅ <span class="tag tag-fix">FIX</span></h3>
+<p><strong>两轮生成</strong>（Python 脚本方案）：</p>
+<pre><code>Pass 1: AI 识别要修改的文件（不生成代码）
+Pass 2: 读取实际文件内容 → AI 基于真实内容生成精确补丁</code></pre>
+<p>（用 Claude Code CLI 后不再有此问题——它用 Read 工具读取真实文件后再 Edit）</p>
+</div>
+
+<!-- Error 9 -->
+<div class="err-box">
+<h3>❌ <span class="tag tag-err">ERROR</span> npm install claude-code 失败 / 太慢</h3>
+<pre><code>npm ERR! 网络超时或包未找到</code></pre>
+</div>
+<div class="fix-box">
+<h3>✅ <span class="tag tag-fix">FIX</span></h3>
+<ul>
+  <li>确保 Node.js ≥ 18</li>
+  <li>使用 <code>actions/setup-node@v4</code> 指定版本 20</li>
+  <li>首次安装约 1-2 分钟，后续有缓存会更快</li>
+</ul>
+</div>
+
+<!-- Error 10 -->
+<div class="err-box">
+<h3>❌ <span class="tag tag-err">ISSUE</span> Actions 列表中出现大量 skipped 记录</h3>
+<pre><code>Workflow Runs 列表中出现 completed skipped 记录</code></pre>
+</div>
+<div class="fix-box">
+<h3>✅ <span class="tag tag-fix">FIX</span></h3>
+<p>Bot 自己的 Issue 评论触发了 <code>issue_comment</code> 事件但条件不匹配。<br>
+在条件中添加 Bot 过滤：</p>
+<pre><code>github.event.comment.user.type != 'Bot'</code></pre>
+</div>
+
+<!-- ================================================================== -->
+<h2 id="verify">6. 验证全链路</h2>
+
+<div class="card">
+<h3>测试步骤</h3>
+
+<ol>
+  <li><strong>创建测试 Issue</strong>：
+    <pre><code>gh issue create --title "[Feature] 简单需求" --label "ai-fix" \
+  --body "## 需求描述\n一个简单明确的需求..."</code></pre>
+  </li>
+  <li><strong>观察 Actions 标签页</strong>：
+    <ul>
+      <li><code>ai-issue-triage</code> 应自动运行 → 添加标签</li>
+      <li><code>ai-auto-fix</code> 应自动运行 → 创建 PR</li>
+      <li><code>ai-code-review</code> 应自动运行 → 提交 Review</li>
+    </ul>
+  </li>
+  <li><strong>验证结果</strong>：
+    <ul>
+      <li>Issue 有分类标签和自动回复</li>
+      <li>PR 已创建，描述包含 AI 自审摘要</li>
+      <li>PR 有 AI Review（无需手动审批）</li>
+    </ul>
+  </li>
+</ol>
+</div>
+
+<div class="card">
+<h3>预期耗时</h3>
+<table>
+  <tr><th>工作流</th><th>预计耗时</th><th>说明</th></tr>
+  <tr><td>AI Triage</td><td>30s - 1min</td><td>含 npm install</td></tr>
+  <tr><td>AI Auto-Fix</td><td>2 - 5min</td><td>含代码分析、修改、自审</td></tr>
+  <tr><td>AI Code Review</td><td>1 - 2min</td><td>含 diff 审查</td></tr>
+  <tr><td>AI Fix Review</td><td>1 - 3min</td><td>仅审查不通过时触发</td></tr>
+</table>
+</div>
+
+<!-- ================================================================== -->
+<h2 id="checklist">7. 部署检查清单</h2>
+
+<div class="card">
+<ul class="checklist">
+  <li><input type="checkbox"> DeepSeek API Key 已获取</li>
+  <li><input type="checkbox"> GitHub Fine-grained PAT 已创建（3 个权限）</li>
+  <li><input type="checkbox"> 仓库 Settings: "Allow GitHub Actions to create PRs" 已勾选</li>
+  <li><input type="checkbox"> 仓库 Secrets 中已添加 6 个变量</li>
+  <li><input type="checkbox"><code>.github/workflows/</code> 目录已创建</li>
+  <li><input type="checkbox"> 4 个 .yml 文件已复制到 workflows 目录</li>
+  <li><input type="checkbox"><code>ai-fix</code> 标签已创建</li>
+  <li><input type="checkbox"> 代码已 push 到 GitHub</li>
+  <li><input type="checkbox"> 创建测试 Issue 验证全链路</li>
+  <li><input type="checkbox"> Issue 有分类标签 → Triage 通过 ✅</li>
+  <li><input type="checkbox"> PR 已创建 → Auto-Fix 通过 ✅</li>
+  <li><input type="checkbox"> PR 有 AI Review → Code Review 通过 ✅</li>
+</ul>
+</div>
+
+<!-- ================================================================== -->
+<hr>
+
+<h2>🔄 版本历程</h2>
+
+<div class="card">
+<table>
+  <tr><th>版本</th><th>架构</th><th>问题</th></tr>
+  <tr>
+    <td>v1</td>
+    <td>Python + Anthropic SDK</td>
+    <td>需要解析 JSON，original_snippet 不匹配</td>
+  </tr>
+  <tr>
+    <td>v2</td>
+    <td>Python + 两轮 API 调用</td>
+    <td>Pass 1 识别文件 → Pass 2 读真实文件生成补丁</td>
+  </tr>
+  <tr>
+    <td>v3 🎯</td>
+    <td><strong>Claude Code CLI</strong></td>
+    <td><strong>AI 自主 Read→Edit→Commit，无需 JSON 解析</strong></td>
+  </tr>
+</table>
+</div>
+
+<div class="card" style="text-align:center; margin-top:2rem;">
+  <p style="font-size:1.2rem;">
+    🚀 <strong>v3 Claude Code CLI 是最佳方案</strong><br>
+    <span style="color:var(--muted);">简单、可靠、灵活 —— 4 个 YAML 文件即可部署</span>
+  </p>
+</div>
+
+</body>
+</html>
