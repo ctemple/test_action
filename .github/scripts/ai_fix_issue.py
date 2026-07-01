@@ -259,6 +259,10 @@ def apply_changes(plan: dict) -> str:
 
     print(f"\n📝 应用代码修改 (分支: {branch_name})...")
 
+    # 清理可能存在的旧分支（上次失败的残留）
+    run(f"git branch -D {branch_name} 2>/dev/null || true", check=False)
+    run(f"git push origin --delete {branch_name} 2>/dev/null || true", check=False)
+
     # 创建并切换到新分支
     run(f"git checkout -b {branch_name}")
 
