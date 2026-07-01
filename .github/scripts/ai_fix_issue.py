@@ -196,8 +196,8 @@ def call_claude_to_fix(issue: dict, repo_context: str) -> dict:
 
     ## 注意
     - 只修改确实需要改的文件
-    - 如果是创建新文件，action="create"，change_description 描述文件应该包含什么
-    - 如果是修改现有文件，action="modify"，change_description 详细描述如何修改
+    - change_description 用简短句子描述，限制200字以内
+    - ⚠️ JSON 字符串中不要用真实换行，需要换行时用 \\n 转义
     """)
 
     user_message_1 = f"""## Issue
@@ -427,10 +427,42 @@ def _parse_json(content: str) -> dict:
         except json.JSONDecodeError:
             pass
 
+    # 策略6: 修复 JSON 字符串内的未转义换行
+    try:
+        fixed = _fix_json_newlines(json_str)
+        return json.loads(fixed)
+    except json.JSONDecodeError:
+        pass
+
     # 调试
-    print(f"    [DEBUG] 无法解析 JSON，原始响应前500字符:")
-    print(f"    {content[:500]}")
+    print(f"    [DEBUG] 无法解析 JSON，原始响应前300字符:")
+    print(f"    {content[:300]}")
     return None
+
+
+def _fix_json_newlines(text: str) -> str:
+    """修复 JSON 字符串内未转义的换行符。"""
+    result = []
+    in_string = False
+    escape_next = False
+    for ch in text:
+        if escape_next:
+            result.append(ch)
+            escape_next = False
+            continue
+        if ch == '\\':
+            result.append(ch)
+            escape_next = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            result.append(ch)
+            continue
+        if in_string and ch == '\n':
+            result.append('\\n')  # 转义换行
+            continue
+        result.append(ch)
+    return ''.join(result)
 
 
 # ============================================================
