@@ -1,0 +1,90 @@
+name: 🤖 AI Code Review
+
+# ============================================================
+# AI 自动代码审查工作流
+# ============================================================
+# 触发方式:
+#   1. PR 被创建或更新
+#   2. 在 PR 评论中输入 "/ai-review"
+#
+# 审查维度:
+#   🐛 Bug / 逻辑错误
+#   🔒 安全漏洞
+#   ⚡ 性能问题
+#   📐 代码风格 / 最佳实践
+#   🧪 测试覆盖建议
+#   📖 文档 / 注释完整性
+# ============================================================
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  pull-requests: write   # 用于提交 PR Review
+  issues: write          # 用于在 PR 中评论
+
+# 避免同时运行多个审查（对同一 PR 的新提交会取消旧的运行）
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+jobs:
+  ai-review:
+    # PR 事件直接运行; PR 评论事件需要检查是否为 "/ai-review" 指令
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request_review_comment' &&
+       github.event.comment.body == '/ai-review' &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'))
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 安装依赖
+        run: |
+          pip install anthropic --quiet
+
+      - name: 🔍 提取 PR 编号
+        id: pr
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 🤖 执行 AI 代码审查
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          REQUEST_CHANGES_ON_ISSUES: "true"
+        run: |
+          python .github/scripts/ai_review_pr.py
+
+      - name: 📝 处理异常
+        if: failure()
+        run: |
+          gh pr comment ${{ steps.pr.outputs.number }} \
+            --repo ${{ github.repository }} \
+            --body "❌ AI 代码审查遇到技术问题，请查看 [Actions 日志](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) 或请求人工审查。"

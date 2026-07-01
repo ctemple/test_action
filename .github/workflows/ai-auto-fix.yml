@@ -1,0 +1,83 @@
+name: 🤖 AI Auto-Fix Issue
+
+# ============================================================
+# AI 自动修复 Issue 工作流
+# ============================================================
+# 触发方式:
+#   1. Issue 被标记 "ai-fix" 标签
+#   2. 在 Issue 评论中输入 "/ai-fix"
+#
+# 工作流程:
+#   Issue → Claude 分析 → 生成代码 → 创建分支 → 提交 PR → 评论通知
+# ============================================================
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write        # 用于创建分支和提交代码
+  pull-requests: write   # 用于创建 PR
+  issues: write          # 用于在 Issue 中添加评论
+
+jobs:
+  ai-fix:
+    # 仅在以下条件触发:
+    # 1. Issue 被标记 "ai-fix"
+    # 2. Issue 评论内容为 "/ai-fix"（且评论者是仓库成员）
+    if: |
+      (github.event.action == 'labeled' && github.event.label.name == 'ai-fix') ||
+      (github.event.action == 'created' &&
+       github.event.comment.body == '/ai-fix' &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'))
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 完整历史，用于分支操作
+
+      - name: 🐍 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 安装依赖
+        run: |
+          pip install anthropic --quiet
+
+      - name: 🔍 提取 Issue 编号
+        id: issue
+        run: |
+          if [ "${{ github.event_name }}" = "issues" ]; then
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 🤖 执行 AI 修复
+        env:
+          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
+        run: |
+          python .github/scripts/ai_fix_issue.py
+
+      - name: 📝 处理结果
+        if: failure()
+        run: |
+          echo "AI 修复流程失败，请在 Issue 中查看详情"
+          gh issue comment ${{ steps.issue.outputs.number }} \
+            --repo ${{ github.repository }} \
+            --body "❌ AI 自动修复遇到问题，请查看 [Actions 日志](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) 了解详情。"

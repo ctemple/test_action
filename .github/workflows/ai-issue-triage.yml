@@ -1,0 +1,46 @@
+name: 🤖 AI Issue Triage
+
+# ============================================================
+# AI 自动 Issue 分类工作流
+# ============================================================
+# 触发方式: 新 Issue 创建
+#
+# 工作流程:
+#   Issue → Claude 分析 → 添加标签 → 自动回复
+# ============================================================
+
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  issues: write       # 用于添加标签和评论
+  contents: read
+
+jobs:
+  triage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      GH_TOKEN: ${{ github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+
+      - name: 🐍 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 安装依赖
+        run: |
+          pip install anthropic --quiet
+
+      - name: 🤖 执行 AI 分类
+        run: |
+          python .github/scripts/ai_triage_issue.py
