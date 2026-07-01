@@ -27,7 +27,7 @@ jobs:
       ANTHROPIC_DEFAULT_HAIKU_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_HAIKU_MODEL }}
       ANTHROPIC_DEFAULT_OPUS_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_OPUS_MODEL }}
       CLAUDE_CODE_DISABLE_1M_CONTEXT: "0"
-      GH_TOKEN: ${{ github.token }}
+      GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
       ISSUE_NUMBER: ${{ github.event.issue.number }}
 
     steps:
