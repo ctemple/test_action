@@ -162,97 +162,243 @@ def get_repo_context() -> str:
 
 def call_claude_to_fix(issue: dict, repo_context: str) -> dict:
     """
-    调用 Claude API，分析 Issue 并生成修复方案。
-    返回包含 plan、files_to_modify、patches 的结构化响应。
+    两轮 API 调用:
+    Pass 1: AI 分析 Issue → 识别需要修改的文件 → 生成修改计划（不包含具体代码）
+    Pass 2: 读取实际文件内容 → AI 基于真实内容生成精确的 original_snippet + new_content
     """
-    print("\n🤖 调用 Claude API 分析 Issue...")
-
     title = issue["title"]
     body = issue.get("body", "")
 
-    system_prompt = textwrap.dedent("""\
-    你是一个资深软件工程师 AI 助手。你的任务是根据 GitHub Issue 的描述，
-    分析问题并在代码库中实现修复。
+    # ================================================================
+    # Pass 1: 分析问题，识别文件和修改方向
+    # ================================================================
+    print("\n🤖 [Pass 1] AI 分析 Issue，识别需要修改的文件...")
 
-    ## 工作流程
-    1. **理解问题**: 仔细阅读 Issue 描述，理解要修复什么
-    2. **分析代码库**: 根据提供的仓库上下文，定位需要修改的文件
-    3. **生成修复方案**: 制定具体的修改计划
-    4. **生成代码**: 对每个文件给出具体的代码修改
+    system_prompt_1 = textwrap.dedent("""\
+    你是一个资深软件工程师 AI 助手。根据 GitHub Issue 的描述和仓库上下文，
+    识别需要修改的文件和修改方向。
 
     ## 输出格式
-    请严格按照以下 JSON 格式输出（不要包含 markdown 代码块标记）:
-
     {
       "analysis": "对问题的简要分析（中文）",
       "files_to_modify": [
         {
-          "path": "相对于仓库根目录的文件路径",
+          "path": "文件路径",
           "action": "create | modify | delete",
-          "reason": "为什么需要修改这个文件",
-          "original_snippet": "需要替换的原始代码片段（modify时）或 null（create时）",
-          "new_content": "完整的文件新内容（create时）或替换后的新代码片段（modify时）"
+          "reason": "为什么需要修改",
+          "change_description": "具体描述如何修改这个文件（不要写代码，只描述修改逻辑）"
         }
       ],
-      "commit_message": "简明扼要的 commit 消息，遵循 conventional commits 格式",
-      "pr_title": "Pull Request 标题",
-      "pr_description": "详细的 PR 描述，说明做了什么修改、为什么这样修改、如何测试"
+      "commit_message": "commit 消息 (conventional commits)",
+      "pr_title": "PR 标题",
+      "pr_description": "PR 描述"
     }
 
-    ## 注意事项
-    - 只修改确实需要改的文件，不要做过度的重构
-    - 遵循项目现有的代码风格
-    - commit_message 遵循 conventional commits 格式: feat:, fix:, refactor:, docs: 等
-    - 如果是创建新文件，action 用 "create"，new_content 写完整的文件内容
-    - 如果是修改现有文件，action 用 "modify"，提供 original_snippet 和 new_content
-    - original_snippet 要足够精确，确保能唯一匹配到文件中的位置
+    ## 注意
+    - 只修改确实需要改的文件
+    - 如果是创建新文件，action="create"，change_description 描述文件应该包含什么
+    - 如果是修改现有文件，action="modify"，change_description 详细描述如何修改
     """)
 
-    user_message = f"""## Issue 信息
+    user_message_1 = f"""## Issue
 
 **标题**: {title}
-
 **描述**:
 {body}
 
 ## 仓库上下文
-
 {repo_context}
 
-## 任务
+请分析并输出 JSON 格式的修改方案（不需要写具体代码，只描述修改逻辑）。"""
 
-请分析以上 Issue，在代码库中找到相关文件并实现修复。输出 JSON 格式的修复方案。"""
+    client = AIClient(task="fix")
+    content_1 = client.chat(
+        system=system_prompt_1,
+        messages=[{"role": "user", "content": user_message_1}],
+        max_tokens=4096,
+    )
 
-    # 使用 AIClient（自动选择 Anthropic / DeepSeek / OpenAI）
+    plan = _parse_json(content_1)
+    if not plan:
+        print("  ❌ Pass 1 响应解析失败")
+        sys.exit(1)
+
+    files = plan.get("files_to_modify", [])
+    print(f"  ✓ 识别到 {len(files)} 个文件需要修改")
+    for f in files:
+        print(f"    - {f['action']}: {f['path']}")
+
+    if not files:
+        return plan
+
+    # ================================================================
+    # Pass 2: 读取实际文件 → 生成精确补丁
+    # ================================================================
+    print(f"\n🤖 [Pass 2] 读取实际文件，生成精确补丁...")
+
+    # 读取需要修改的文件内容
+    file_contents = {}
+    for f in files:
+        if f["action"] == "modify":
+            fpath = Path(f["path"])
+            if fpath.exists():
+                content = fpath.read_text(encoding="utf-8")
+                file_contents[f["path"]] = content
+                print(f"  ✓ 读取: {f['path']} ({len(content)} 字符)")
+            else:
+                print(f"  ⚠️ 文件不存在: {f['path']}，降级为 create")
+                f["action"] = "create"
+
+    # 为每个文件生成精确补丁
+    final_files = []
+    for f in files:
+        if f["action"] == "create":
+            # 创建新文件 — 需要生成完整文件内容
+            final_files.append(_generate_create_file(f, plan, issue))
+        elif f["action"] == "modify":
+            # 修改现有文件 — 基于实际内容生成 original_snippet + new_content
+            final_files.append(_generate_modify_patch(f, file_contents[f["path"]], plan, issue))
+        else:
+            final_files.append(f)
+
+    plan["files_to_modify"] = final_files
+    print(f"  ✓ Pass 2 完成，{len(final_files)} 个文件的精确补丁已生成")
+    return plan
+
+
+def _generate_create_file(file_spec: dict, plan: dict, issue: dict) -> dict:
+    """为新建文件生成完整的文件内容。"""
+    print(f"    🆕 生成新文件: {file_spec['path']}")
+
+    system_prompt = textwrap.dedent("""\
+    你是软件工程师。根据需求描述生成一个完整的文件。
+
+    ## 输出格式
+    {
+      "path": "文件路径",
+      "action": "create",
+      "reason": "创建原因",
+      "new_content": "完整的文件内容（所有代码）"
+    }
+    """)
+
+    user_message = f"""## 需求
+**标题**: {issue.get('title', '')}
+**描述**: {issue.get('body', '')}
+
+## 修改方案
+{plan.get('analysis', '')}
+
+## 文件信息
+- 路径: {file_spec['path']}
+- 修改方向: {file_spec.get('change_description', '')}
+
+请输出完整的文件内容。"""
+
+    client = AIClient(task="fix")
+    content = client.chat(
+        system=system_prompt,
+        messages=[{"role": "user", "content": user_message}],
+        max_tokens=4096,
+    )
+    result = _parse_json(content)
+    if result:
+        result["action"] = "create"
+        return result
+    return file_spec
+
+
+def _generate_modify_patch(file_spec: dict, file_content: str, plan: dict, issue: dict) -> dict:
+    """基于实际文件内容生成精确的 original_snippet + new_content。"""
+    print(f"    ✏️  生成补丁: {file_spec['path']}")
+
+    # 行号标注
+    numbered_lines = []
+    for i, line in enumerate(file_content.split('\n'), 1):
+        numbered_lines.append(f"{i:4d}| {line}")
+    numbered_content = '\n'.join(numbered_lines)
+
+    system_prompt = textwrap.dedent("""\
+    你是软件工程师。基于实际文件内容，生成精确的代码修改补丁。
+
+    ## 重要规则
+    1. **original_snippet 必须从下面提供的文件内容中逐字复制**
+    2. **original_snippet 必须足够长且唯一**（至少 3 行，确保在文件中只出现一次）
+    3. **new_content 是替换后的新代码**，保持相同缩进级别
+    4. 如果新增功能，只修改必要的部分，不要重写整个文件
+
+    ## 输出格式
+    {
+      "path": "文件路径",
+      "action": "modify",
+      "reason": "修改原因",
+      "original_snippet": "从文件中精确复制的原始代码",
+      "new_content": "替换后的新代码"
+    }
+    """)
+
+    user_message = f"""## 需求
+**标题**: {issue.get('title', '')}
+**描述**: {issue.get('body', '')}
+
+## 修改方案
+{plan.get('analysis', '')}
+
+## 当前文件: {file_spec['path']}
+修改方向: {file_spec.get('change_description', '')}
+
+## 实际文件内容（带行号）
+```
+{numbered_content[:8000]}
+```
+
+请基于以上实机文件内容，输出精确的补丁。original_snippet 必须从上面逐字复制！"""
+
     client = AIClient(task="fix")
     content = client.chat(
         system=system_prompt,
         messages=[{"role": "user", "content": user_message}],
         max_tokens=8192,
     )
+    result = _parse_json(content)
+    if result:
+        result["action"] = "modify"
+        # 验证 original_snippet 确实在文件中
+        if result.get("original_snippet") and result["original_snippet"] not in file_content:
+            print(f"    ⚠️ original_snippet 未在文件中找到！AI 可能未逐字复制")
+            # 尝试宽松匹配（去掉首尾空白）
+            snippet = result["original_snippet"].strip()
+            if snippet in file_content:
+                print(f"    ✓ 去除首尾空白后匹配成功")
+                result["original_snippet"] = snippet
+            else:
+                print(f"    ❌ 仍然无法匹配，将尝试模糊匹配")
+        else:
+            print(f"    ✓ original_snippet 验证通过")
+        return result
 
-    # 尝试解析 JSON（可能包裹在 markdown 代码块中）
+    print(f"    ⚠️ 补丁生成失败，使用原始规格")
+    return file_spec
+
+
+def _parse_json(content: str) -> dict:
+    """从 AI 响应中解析 JSON。"""
     json_str = content
     json_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
     if json_match:
         json_str = json_match.group(1)
 
     try:
-        plan = json.loads(json_str)
+        return json.loads(json_str)
     except json.JSONDecodeError:
-        print("  ⚠️ Claude 返回的 JSON 解析失败，尝试修复...")
-        # 尝试找到 JSON 的起始和结束
         start = json_str.find('{')
         end = json_str.rfind('}')
         if start != -1 and end != -1:
-            plan = json.loads(json_str[start:end + 1])
-        else:
-            print(f"  ❌ 无法解析响应:\n{content}")
-            sys.exit(1)
-
-    print(f"  ✓ 分析完成: {plan.get('analysis', 'N/A')[:100]}...")
-    print(f"  ✓ 需要修改 {len(plan.get('files_to_modify', []))} 个文件")
-    return plan
+            try:
+                return json.loads(json_str[start:end + 1])
+            except json.JSONDecodeError:
+                pass
+    return None
 
 
 # ============================================================
@@ -294,26 +440,65 @@ def apply_changes(plan: dict) -> str:
         elif action == "modify":
             # 读取现有文件
             original = Path(path).read_text(encoding="utf-8")
-            old_snippet = f["original_snippet"]
-            new_content = f["new_content"]
+            old_snippet = f.get("original_snippet", "")
+            new_content = f.get("new_content", "")
 
-            if old_snippet not in original:
-                print(f"    ⚠️ 原始代码片段未在文件中找到，尝试模糊匹配...")
-                # 尝试按行匹配
-                old_lines = old_snippet.strip().split('\n')
-                if len(old_lines) > 0:
-                    first_line = old_lines[0].strip()
-                    if first_line in original:
-                        print(f"    ✓ 通过首行匹配成功")
-                        # 仍然使用原始替换逻辑
-                        pass
-                    else:
-                        print(f"    ❌ 无法定位修改位置，跳过此文件")
-                        continue
+            if not old_snippet:
+                print(f"    ❌ original_snippet 为空，跳过")
+                continue
 
-            new_file = original.replace(old_snippet, new_content, 1)
+            matched = False
+            effective_snippet = old_snippet
+
+            # 策略1: 精确匹配
+            if old_snippet in original:
+                matched = True
+            else:
+                print(f"    ⚠️ 精确匹配失败，尝试其他策略...")
+                # 策略2: 去除首尾空白后匹配
+                stripped = old_snippet.strip()
+                if stripped and stripped in original:
+                    effective_snippet = stripped
+                    matched = True
+                    print(f"    ✓ 去空白后匹配成功")
+                # 策略3: 按首行+末行定位
+                if not matched:
+                    old_lines = old_snippet.strip().split('\n')
+                    if len(old_lines) >= 2:
+                        first = old_lines[0].strip()
+                        last = old_lines[-1].strip()
+                        # 在文件中找到首行和末行之间的内容
+                        file_lines = original.split('\n')
+                        start_idx, end_idx = -1, -1
+                        for j, line in enumerate(file_lines):
+                            if start_idx == -1 and first in line:
+                                start_idx = j
+                            if start_idx != -1 and last in line and j >= start_idx:
+                                end_idx = j
+                                break
+                        if start_idx != -1 and end_idx != -1:
+                            effective_snippet = '\n'.join(file_lines[start_idx:end_idx+1])
+                            matched = True
+                            print(f"    ✓ 首尾行定位成功 (L{start_idx+1}-L{end_idx+1})")
+                # 策略4: 尝试缩进变体（空格 vs tab）
+                if not matched:
+                    # 如果文件用空格，snippet 可能用 tab，反过来也是
+                    for variant in [old_snippet.replace('    ', '\t'), old_snippet.replace('\t', '    ')]:
+                        if variant in original:
+                            effective_snippet = variant
+                            matched = True
+                            print(f"    ✓ 缩进调整后匹配成功")
+                            break
+
+            if not matched:
+                print(f"    ❌ 所有匹配策略失败，跳过此文件")
+                print(f"    提示: 请检查文件内容是否已变更")
+                continue
+
+            new_file = original.replace(effective_snippet, new_content, 1)
             Path(path).write_text(new_file, encoding="utf-8")
             run(f"git add {path}")
+            print(f"    ✓ 已应用修改")
 
         elif action == "delete":
             Path(path).unlink(missing_ok=True)
