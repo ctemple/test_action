@@ -5,6 +5,7 @@
 [![AI Auto-Fix](https://github.com/ctemple/test_action/actions/workflows/ai-auto-fix.yml/badge.svg)](https://github.com/ctemple/test_action/actions/workflows/ai-auto-fix.yml)
 [![AI Code Review](https://github.com/ctemple/test_action/actions/workflows/ai-code-review.yml/badge.svg)](https://github.com/ctemple/test_action/actions/workflows/ai-code-review.yml)
 [![AI Triage](https://github.com/ctemple/test_action/actions/workflows/ai-issue-triage.yml/badge.svg)](https://github.com/ctemple/test_action/actions/workflows/ai-issue-triage.yml)
+[![AI Fix Review](https://github.com/ctemple/test_action/actions/workflows/ai-fix-review.yml/badge.svg)](https://github.com/ctemple/test_action/actions/workflows/ai-fix-review.yml)
 
 ```
                     📝 Issue 创建
