@@ -7,11 +7,24 @@ AI Workflow CLI - 命令行入口
 
 import sys
 import os
+import argparse
+import tomllib
 
 # 将 .github/scripts 加入 Python 路径，以便导入 ai_client
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '.github', 'scripts'))
 
 from ai_client import AIProvider, get_ai_client
+
+
+def get_version():
+    """从 pyproject.toml 读取版本号，若文件不存在则返回 '0.1.0'"""
+    pyproject_path = os.path.join(os.path.dirname(__file__), 'pyproject.toml')
+    try:
+        with open(pyproject_path, 'rb') as f:
+            data = tomllib.load(f)
+        return data.get('project', {}).get('version', '0.1.0')
+    except (FileNotFoundError, tomllib.TOMLDecodeError, KeyError):
+        return '0.1.0'
 
 
 def get_project_info():
