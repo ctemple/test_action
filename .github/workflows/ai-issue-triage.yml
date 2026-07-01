@@ -41,7 +41,7 @@ jobs:
 
       - name: 📦 安装依赖
         run: |
-          pip install anthropic --quiet
+          pip install anthropic openai --quiet
 
       - name: 🤖 执行 AI 分类
         run: |

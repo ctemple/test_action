@@ -59,7 +59,12 @@ jobs:
 
       - name: 📦 安装依赖
         run: |
-          pip install anthropic --quiet
+          pip install anthropic openai --quiet
+
+      - name: 🔧 配置 Git
+        run: |
+          git config user.name "🤖 AI Bot"
+          git config user.email "ai-bot@github-actions.com"
 
       - name: 🔍 提取 Issue 编号
         id: issue
