@@ -35,8 +35,13 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", os.environ.get("GH_TOKEN", ""))
 REPO = os.environ.get("GITHUB_REPOSITORY", "")
 ISSUE_NUMBER = os.environ.get("ISSUE_NUMBER", "")
 
-# Claude 模型选择
-CLAUDE_MODEL = "claude-sonnet-4-6"  # 性价比最佳
+# 确保可以导入同目录下的 ai_client 模块
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from ai_client import AIClient
+
+# 模型配置（如果使用 AI_MODEL_FIX 环境变量可以覆盖）
+CLAUDE_MODEL = os.environ.get("AI_MODEL_FIX", "claude-sonnet-4-6")
 
 # 是否仅生成计划而不实际修改代码（dry-run 模式）
 DRY_RUN = os.environ.get("DRY_RUN", "false").lower() == "true"
@@ -204,26 +209,13 @@ def call_claude_to_fix(issue: dict, repo_context: str) -> dict:
 
 请分析以上 Issue，在代码库中找到相关文件并实现修复。输出 JSON 格式的修复方案。"""
 
-    # 使用 anthropic SDK
-    try:
-        from anthropic import Anthropic
-    except ImportError:
-        print("  安装 anthropic SDK...")
-        run("pip install anthropic -q")
-
-    from anthropic import Anthropic
-
-    client = Anthropic(api_key=ANTHROPIC_API_KEY)
-
-    response = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=8192,
+    # 使用 AIClient（自动选择 Anthropic / DeepSeek / OpenAI）
+    client = AIClient(task="fix")
+    content = client.chat(
         system=system_prompt,
         messages=[{"role": "user", "content": user_message}],
+        max_tokens=8192,
     )
-
-    # 提取响应文本
-    content = response.content[0].text
 
     # 尝试解析 JSON（可能包裹在 markdown 代码块中）
     json_str = content
@@ -384,9 +376,9 @@ def main():
     print(f"   Dry-Run: {DRY_RUN}")
     print("=" * 60)
 
-    # 验证环境
-    if not ANTHROPIC_API_KEY:
-        print("❌ 缺少 ANTHROPIC_API_KEY 环境变量")
+    # 验证环境（AIClient 会自动检测可用的 API Key）
+    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY")):
+        print("❌ 缺少 API Key！请设置 ANTHROPIC_API_KEY、DEEPSEEK_API_KEY 或 OPENAI_API_KEY")
         sys.exit(1)
 
     # Step 1: 获取 Issue

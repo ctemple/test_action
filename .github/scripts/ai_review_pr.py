@@ -44,7 +44,13 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", os.environ.get("GH_TOKEN", ""))
 REPO = os.environ.get("GITHUB_REPOSITORY", "")
 PR_NUMBER = os.environ.get("PR_NUMBER", "")
 
-CLAUDE_MODEL = "claude-sonnet-4-6"
+# 确保可以导入同目录下的 ai_client 模块
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from ai_client import AIClient
+
+# 模型配置（如果使用 AI_MODEL_REVIEW 环境变量可以覆盖）
+CLAUDE_MODEL = os.environ.get("AI_MODEL_REVIEW", "claude-sonnet-4-6")
 
 # 最大 diff 大小（字节），超过此大小将进行截断
 MAX_DIFF_SIZE = 50000
@@ -198,25 +204,13 @@ def call_claude_to_review(pr_info: dict, diff: str, changed_files: list[str]) ->
 
 请对以上代码变更进行全面的代码审查，输出 JSON 格式的审查结果。"""
 
-    # 安装并使用 anthropic SDK
-    try:
-        from anthropic import Anthropic
-    except ImportError:
-        print("  安装 anthropic SDK...")
-        run("pip install anthropic -q")
-
-    from anthropic import Anthropic
-
-    client = Anthropic(api_key=ANTHROPIC_API_KEY)
-
-    response = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=8192,
+    # 使用 AIClient（自动选择 Anthropic / DeepSeek / OpenAI）
+    client = AIClient(task="review")
+    content = client.chat(
         system=system_prompt,
         messages=[{"role": "user", "content": user_message}],
+        max_tokens=8192,
     )
-
-    content = response.content[0].text
 
     # 解析 JSON
     json_str = content
@@ -414,8 +408,8 @@ def main():
     print(f"   模型: {CLAUDE_MODEL}")
     print("=" * 60)
 
-    if not ANTHROPIC_API_KEY:
-        print("❌ 缺少 ANTHROPIC_API_KEY 环境变量")
+    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY")):
+        print("❌ 缺少 API Key！请设置 ANTHROPIC_API_KEY、DEEPSEEK_API_KEY 或 OPENAI_API_KEY")
         sys.exit(1)
 
     # 跳过 bot 创建的 PR（避免递归审查）

@@ -26,7 +26,12 @@ GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN", os.environ.get("GH_TOKEN", ""))
 REPO = os.environ.get("GITHUB_REPOSITORY", "")
 ISSUE_NUMBER = os.environ.get("ISSUE_NUMBER", "")
 
-CLAUDE_MODEL = "claude-haiku-4-5-20251001"  # 分类任务使用轻量模型
+# 确保可以导入同目录下的 ai_client 模块
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from ai_client import AIClient
+
+CLAUDE_MODEL = os.environ.get("AI_MODEL_TRIAGE", "claude-haiku-4-5-20251001")  # 分类任务使用轻量模型
 
 
 def run(cmd: str, check: bool = True) -> subprocess.CompletedProcess:
@@ -131,24 +136,13 @@ def call_claude_triage(issue: dict, available_labels: list[dict]) -> dict:
 **作者**: {issue['author']['login']}
 
 请分类此 Issue。"""
-    try:
-        from anthropic import Anthropic
-    except ImportError:
-        print("  安装 anthropic SDK...")
-        run("pip install anthropic -q")
-
-    from anthropic import Anthropic
-
-    client = Anthropic(api_key=ANTHROPIC_API_KEY)
-
-    response = client.messages.create(
-        model=CLAUDE_MODEL,
-        max_tokens=2048,
+    # 使用 AIClient（自动选择 Anthropic / DeepSeek / OpenAI）
+    client = AIClient(task="triage")
+    content = client.chat(
         system=system_prompt,
         messages=[{"role": "user", "content": user_message}],
+        max_tokens=2048,
     )
-
-    content = response.content[0].text
     json_str = content
     json_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
     if json_match:
@@ -253,8 +247,8 @@ def main():
     print(f"   Issue: #{ISSUE_NUMBER}")
     print("=" * 60)
 
-    if not ANTHROPIC_API_KEY:
-        print("❌ 缺少 ANTHROPIC_API_KEY")
+    if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("DEEPSEEK_API_KEY") or os.environ.get("OPENAI_API_KEY")):
+        print("❌ 缺少 API Key！请设置 ANTHROPIC_API_KEY、DEEPSEEK_API_KEY 或 OPENAI_API_KEY")
         sys.exit(1)
 
     issue = get_issue()
