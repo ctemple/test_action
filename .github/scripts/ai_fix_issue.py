@@ -418,10 +418,18 @@ def _parse_json(content: str) -> dict:
     except json.JSONDecodeError:
         pass
 
-    # 调试: 打印原始内容的前 500 字符
+    # 策略5: AI 有时忘了外层 {}，自动补全
+    stripped = json_str.strip()
+    if not stripped.startswith('{') and not stripped.startswith('['):
+        wrapped = '{' + stripped + '}'
+        try:
+            return json.loads(wrapped)
+        except json.JSONDecodeError:
+            pass
+
+    # 调试
     print(f"    [DEBUG] 无法解析 JSON，原始响应前500字符:")
     print(f"    {content[:500]}")
-
     return None
 
 
