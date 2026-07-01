@@ -76,6 +76,17 @@ jobs:
           claude -p "
           你是一个软件工程师 AI。请完成以下任务：
 
+          0. **需求明确性检查（必须首先执行）**：
+             读取 Issue 内容，判断需求是否足够明确。
+             一个「明确」的需求包含：做什么、在哪里做、期望结果。
+             如果需求模糊不清（比如\"改一下那个页面\"没说具体改什么、
+             \"修复 bug\"没描述复现步骤等），不要开始写代码。
+             改为：
+             - 评论提问（用 gh issue comment），列出 2-3 个具体问题
+             - 移除 ai-fix 标签，添加 ai-clarifying 标签
+             - 退出（不要再执行后续步骤）
+             只有需求明确时才继续。
+
           1. 读取 GitHub Issue #$ISSUE_NUMBER 的内容：
              gh issue view $ISSUE_NUMBER --repo ${{ github.repository }} --json title,body,labels
 

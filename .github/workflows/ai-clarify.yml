@@ -1,0 +1,102 @@
+name: 🤖 AI Clarify
+
+# ============================================================
+# AI 需求澄清工作流
+# ============================================================
+# 在 AI Auto-Fix 之前，确保需求明确。
+# 如果需求不清晰，AI 评论提问，反复沟通直到明确。
+#
+# 触发:
+#   - Issue 标记 ai-clarifying 标签（首次进入澄清模式）
+#   - Issue 有新评论（作者回复后重新评估）
+#
+# 流程:
+#   需求不明确 → AI 提问 → 作者回答 → AI 再评估 → 明确后总结
+# ============================================================
+
+on:
+  issues:
+    types: [labeled]
+  issue_comment:
+    types: [created]
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  clarify:
+    # 触发条件:
+    # 1. 添加 ai-clarifying 标签
+    # 2. 在 ai-clarifying 的 Issue 下有新评论（且非 Bot）
+    if: |
+      (github.event_name == 'issues' &&
+       github.event.action == 'labeled' &&
+       github.event.label.name == 'ai-clarifying') ||
+      (github.event_name == 'issue_comment' &&
+       github.event.comment.user.type != 'Bot' &&
+       !startsWith(github.event.comment.body, '/') &&
+       contains(github.event.issue.labels.*.name, 'ai-clarifying'))
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+      ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_HAIKU_MODEL }}
+      ANTHROPIC_DEFAULT_OPUS_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_OPUS_MODEL }}
+      CLAUDE_CODE_DISABLE_1M_CONTEXT: "0"
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "20" }
+      - run: npm install -g @anthropic-ai/claude-code
+
+      - id: issue
+        run: |
+          if [ "${{ github.event_name }}" = "issues" ]; then
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - env:
+          ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
+        run: |
+          claude -p "
+          你是一个需求分析师。请处理 Issue #$ISSUE_NUMBER。
+
+          1. 读取 Issue 内容和所有评论：
+             gh issue view $ISSUE_NUMBER --repo ${{ github.repository }} --comments --json title,body,comments
+
+          2. 评估需求是否明确。一个「明确」的需求应包含：
+             - 具体要做什么（功能/Bug）
+             - 涉及哪些文件或模块
+             - 期望的结果是什么
+             - 有无特殊限制或约束
+
+          3. 分两种情况处理：
+
+          ## 情况A：需求已明确 ✅
+          - 写一条总结评论，格式：
+            '## ✅ 需求确认\n\n### 已明确的需求\n...\n\n### 实现方案\n...\n\n需求已明确，AI 将开始实现。'
+          - 移除 ai-clarifying 标签，添加 ai-fix 标签：
+            gh issue edit $ISSUE_NUMBER --repo ${{ github.repository }} --remove-label ai-clarifying --add-label ai-fix
+
+          ## 情况B：需求仍不明确 ❓
+          - 写一条评论，列出 2-4 个具体问题
+          - 每个问题简洁明了，方便作者回答
+          - 格式：
+            '## ❓ 需求澄清\n\n我需要确认以下几点：\n\n1. **问题1**: ...\n2. **问题2**: ...\n\n请回复以上问题，我会根据你的回答继续。'
+          - 保持 ai-clarifying 标签不变
+
+          ⚠️ 重要：
+          - 保持 ai-clarifying 标签不变
+          - 如果已有 3 轮以上问答仍未明确，建议人工介入并 @ 仓库维护者
+          - 提问要具体，不要问开放式问题
+          - 如果需求永远无法明确（例如过于模糊），说明原因并建议关闭 Issue
+          " --allowedTools "Read,Bash(gh:*)" --output-format text --verbose

@@ -5,28 +5,32 @@
 ```
                     📝 Issue 创建
                          │
-            ┌────────────┼────────────┐
-            ▼            ▼            ▼
-       🏷️ AI Triage  🔧 AI Auto-Fix  🔍 AI Code Review
-       (自动分类)    (写代码→PR)    (审查PR代码)
-                         │                 │
-                         ▼                 │
-                   📥 Pull Request         │
-                         │                 │
-                         ▼                 │
-                   🔍 AI Review           │
-                   (自动审查)             │
-                         │                 │
-                    ┌────┴────┐            │
-                    ▼         ▼            │
-                  ✅ 通过   ❌ 不通过      │
-                    │         │            │
-                    │         ▼            │
-                    │    🔧 AI Fix Review  │
-                    │    (修复→推送)       │
-                    │         │            │
-                    └─────────┘            │
-                         │                 │
+                         ▼
+                    🏷️ AI Triage
+                    (自动分类)
+                         │
+                         ▼
+                    💬 AI Clarify 🆕
+                    (需求不明确→提问→明确→总结)
+                         │
+                         ▼
+                    🔧 AI Auto-Fix
+                    (写代码→自审→PR)
+                         │
+                         ▼
+                    🔍 AI Code Review
+                    (自动审查)
+                         │
+                    ┌────┴────┐
+                    ▼         ▼
+                  ✅ 通过   ❌ 不通过
+                    │         │
+                    │         ▼
+                    │    🔧 AI Fix Review
+                    │    (修复→推送)
+                    │         │
+                    └─────────┘
+                         │
                          └── 审查→修复循环 ─┘
 ```
 
@@ -64,7 +68,20 @@ gh label create P2 --color "FFA500" && gh label create P3 --color "4ECDC4"
 
 ---
 
-## 📋 四个工作流
+## 📋 五个工作流
+
+### 💬 AI Clarify — 需求澄清 🆕
+
+| 触发 | 说明 |
+|------|------|
+| Issue 打 `ai-clarifying` 标签 | 进入澄清模式 |
+| Issue 有新评论（作者回复） | AI 重新评估需求 |
+
+**执行流程**:
+1. AI 读取 Issue 和所有评论
+2. 评估需求是否明确（做什么、在哪里、期望结果）
+3. ❓ **不明确** → 评论 2-3 个具体问题 → 保持 `ai-clarifying` 标签
+4. ✅ **明确** → 评论需求确认总结 → 移除 `ai-clarifying` → 添加 `ai-fix` → 进入 Auto-Fix
 
 ### 🤖 AI Auto-Fix — Issue → 代码 → PR
 
