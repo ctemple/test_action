@@ -1,0 +1,87 @@
+name: 🤖 AI Fix Review
+
+# ============================================================
+# AI 自动修复审查意见工作流
+# ============================================================
+# 触发方式:
+#   1. PR Review 提交且状态为 CHANGES_REQUESTED（AI 审查不通过）
+#   2. PR 评论 "/ai-fix-review"
+#
+# 工作流程:
+#   Review 不通过 → 读取审查意见 → AI 修复 → 推送新 commit → 重新触发审查
+#
+# 安全机制:
+#   - 最多自动修复 2 轮，防止死循环
+#   - 仅处理 AI 自己的 Review
+#   - 仅修复 CRITICAL 和 HIGH 级别的问题
+# ============================================================
+
+on:
+  pull_request_review:
+    types: [submitted]
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  fix-review:
+    # 触发条件:
+    # 1. AI Review 提交了 CHANGES_REQUESTED
+    # 2. PR 评论 "/ai-fix-review"
+    if: |
+      (github.event_name == 'pull_request_review' &&
+       github.event.review.state == 'changes_requested') ||
+      (github.event_name == 'issue_comment' &&
+       github.event.comment.body == '/ai-fix-review' &&
+       contains(github.event.issue.pull_request, 'true') &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'))
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
+      GITHUB_REPOSITORY: ${{ github.repository }}
+
+    steps:
+      - name: 📥 检出代码
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 🐍 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 📦 安装依赖
+        run: |
+          pip install anthropic openai --quiet
+
+      - name: 🔧 配置 Git
+        run: |
+          git config user.name "🤖 AI Bot"
+          git config user.email "ai-bot@github-actions.com"
+
+      - name: 🔍 提取 PR 编号
+        id: pr
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request_review" ]; then
+            echo "number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 🤖 执行 AI 修复审查意见
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: |
+          python .github/scripts/ai_fix_review.py

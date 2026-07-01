@@ -13,13 +13,25 @@
             ▼            ▼            ▼
        🏷️ AI Triage  🔧 AI Auto-Fix  🔍 AI Code Review
        (自动分类)    (写代码→PR)    (审查PR代码)
-                         │
-                         ▼
-                   📥 Pull Request
-                         │
-                         ▼
-                   🔍 AI Review
-                   (无需审批!)
+                         │                 │
+                         ▼                 │
+                   📥 Pull Request         │
+                         │                 │
+                         ▼                 │
+                   🔍 AI Review           │
+                   (自动审查)             │
+                         │                 │
+                    ┌────┴────┐            │
+                    ▼         ▼            │
+                  ✅ 通过   ❌ 不通过      │
+                    │         │            │
+                    │         ▼            │
+                    │    🔧 AI Fix Review  │
+                    │    (修复→推送)       │
+                    │         │            │
+                    └─────────┘            │
+                         │                 │
+                         └───── 循环 ──────┘
 ```
 
 ---
@@ -76,7 +88,7 @@ gh label create ai-in-progress --color "9370DB" --description "AI 正在修复"
 
 ---
 
-## 📋 三个工作流
+## 📋 四个工作流
 
 ### 🤖 AI Auto-Fix — Issue → 代码 → PR
 
@@ -109,6 +121,26 @@ gh label create ai-in-progress --color "9370DB" --description "AI 正在修复"
 - 🧪 测试覆盖建议
 - 📖 文档 / 注释完整性
 
+### 🔧 AI Fix Review — 审查不通过 → 自动修复 → 重新审查 🆕
+
+| 触发方式 | 说明 |
+|----------|------|
+| AI Review 提交 CHANGES_REQUESTED | 自动触发 |
+| PR 评论 `/ai-fix-review` | 手动触发 |
+
+**执行流程**:
+1. AI Code Review 发现严重问题（CRITICAL/HIGH）→ REQUEST_CHANGES
+2. 此 workflow 自动触发，读取审查意见
+3. AI 修复 CRITICAL 和 HIGH 级别的问题
+4. 推送新 commit 到同一分支
+5. PR 同步事件触发新一轮 AI Code Review
+6. 循环直到通过 ✅ 或达到 2 轮上限
+
+**安全机制**:
+- 🔄 最多自动修复 2 轮，防止死循环
+- 🎯 仅修复 CRITICAL 和 HIGH 级别问题
+- 🤖 仅响应 AI 自己的 Review（人类审查意见不触发）
+
 ### 🏷️ AI Triage — 新 Issue → 自动分类
 
 新 Issue 创建时自动运行：
@@ -132,11 +164,13 @@ gh label create ai-in-progress --color "9370DB" --description "AI 正在修复"
     ├── workflows/
     │   ├── ai-auto-fix.yml             # AI 自动修复
     │   ├── ai-code-review.yml          # AI 代码审查
+    │   ├── ai-fix-review.yml           # 🆕 AI 修复审查意见（闭环）
     │   └── ai-issue-triage.yml         # AI 自动分类
     ├── scripts/
     │   ├── ai_client.py                # 🌐 统一 AI Provider（Anthropic/DeepSeek/OpenAI）
     │   ├── ai_fix_issue.py             # AI 修复核心逻辑
     │   ├── ai_review_pr.py             # AI 审查核心逻辑
+    │   ├── ai_fix_review.py            # 🆕 AI 修复审查意见核心逻辑
     │   └── ai_triage_issue.py          # AI 分类核心逻辑
     ├── ISSUE_TEMPLATE/
     │   └── ai_bug_fix.yml              # Bug 修复 Issue 模板
@@ -236,6 +270,7 @@ python .github/scripts/ai_client.py
 
 - [x] AI 自动修复 Issue → PR
 - [x] AI 自动代码审查（无需审批）
+- [x] AI 审查→修复→审查 闭环 🆕
 - [x] AI 自动 Issue 分类
 - [x] 多 Provider 支持（DeepSeek / Claude / OpenAI）
 - [x] CLI 本地调试工具
