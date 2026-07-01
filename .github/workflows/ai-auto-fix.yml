@@ -111,6 +111,9 @@ jobs:
           - 分支名必须是 ai/fix-issue-$ISSUE_NUMBER
           - PR 描述中要包含自审结论
           - commit message 遵循 conventional commits 格式
+          - 如果需求不明确或存在歧义，选择最合理的默认方案，
+            并在 PR 描述中标注你的假设和选择理由
+          - 不要反复尝试同一个失败的操作超过 3 次
           " \
             --allowedTools "Read,Write,Edit,Bash(git:*),Bash(gh:*),Glob,Grep" \
             --output-format text \
