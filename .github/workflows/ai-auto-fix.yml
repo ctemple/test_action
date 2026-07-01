@@ -24,6 +24,7 @@ jobs:
       (github.event.action == 'labeled' && github.event.label.name == 'ai-fix') ||
       (github.event.action == 'created' &&
        github.event.comment.body == '/ai-fix' &&
+       github.event.comment.user.type != 'Bot' &&
        (github.event.comment.author_association == 'OWNER' ||
         github.event.comment.author_association == 'MEMBER' ||
         github.event.comment.author_association == 'COLLABORATOR'))
