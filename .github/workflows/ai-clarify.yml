@@ -24,18 +24,28 @@ permissions:
   issues: write
   contents: read
 
+# 同一个 Issue 同时只跑一个 Clarify
+concurrency:
+  group: ai-clarify-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
 jobs:
   clarify:
     # 触发条件:
     # 1. 添加 ai-clarifying 标签
-    # 2. 在 ai-clarifying 的 Issue 下有新评论（且非 Bot）
+    # 2. Issue 有新评论（排除 bot/AI评论、排除斜杠指令、必须有 ai-clarifying 标签）
     if: |
       (github.event_name == 'issues' &&
        github.event.action == 'labeled' &&
        github.event.label.name == 'ai-clarifying') ||
       (github.event_name == 'issue_comment' &&
-       github.event.comment.user.type != 'Bot' &&
+       github.event.action == 'created' &&
+       github.event.sender.type != 'Bot' &&
+       !contains(github.event.comment.user.login, '[bot]') &&
        !startsWith(github.event.comment.body, '/') &&
+       !startsWith(github.event.comment.body, '## ❓') &&
+       !startsWith(github.event.comment.body, '## ✅') &&
+       !startsWith(github.event.comment.body, '## 分类结果') &&
        contains(github.event.issue.labels.*.name, 'ai-clarifying'))
 
     runs-on: ubuntu-latest
