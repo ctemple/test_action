@@ -58,7 +58,8 @@ jobs:
           3. 添加标签（使用 gh issue edit --add-label）:
              - 类别标签
              - 优先级标签（如果标签不存在，先 gh label create）
-             - 如果适合 AI 修复，添加 ai-fix 标签
+             - 如果适合 AI 修复，添加 ai-clarifying 标签（不是 ai-fix！）
+               因为需要先经过需求澄清，确认明确后才能进入修复阶段
 
           4. 在 Issue 中回复分类结果:
              gh issue comment $ISSUE_NUMBER --repo ${{ github.repository }} \
@@ -66,6 +67,7 @@ jobs:
 
           ⚠️ 跳过 bot 创建的 Issue（作者名包含 [bot]）。
           ⚠️ 如果 Issue 已有分类标签则跳过。
+          ⚠️ 适合 AI 修复的 Issue 打 ai-clarifying，不要直接打 ai-fix。
           " \
             --allowedTools "Read,Bash(gh:*)" \
             --output-format text \
