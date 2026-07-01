@@ -418,18 +418,20 @@ def _parse_json(content: str) -> dict:
     except json.JSONDecodeError:
         pass
 
-    # 策略5: AI 有时忘了外层 {}，自动补全
-    stripped = json_str.strip()
-    if not stripped.startswith('{') and not stripped.startswith('['):
-        wrapped = '{' + stripped + '}'
-        try:
-            return json.loads(wrapped)
-        except json.JSONDecodeError:
-            pass
-
-    # 策略6: 修复 JSON 字符串内的未转义换行
+    # 策略5: 修复 JSON 字符串内未转义换行
     try:
         fixed = _fix_json_newlines(json_str)
+        cleaned = json.loads(fixed)
+        return cleaned
+    except json.JSONDecodeError:
+        pass
+
+    # 策略6: 修复换行 + 补全外层 {}
+    try:
+        fixed = _fix_json_newlines(json_str)
+        stripped = fixed.strip()
+        if not stripped.startswith('{') and not stripped.startswith('['):
+            fixed = '{' + stripped + '}'
         return json.loads(fixed)
     except json.JSONDecodeError:
         pass
