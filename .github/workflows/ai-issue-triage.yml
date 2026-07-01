@@ -1,12 +1,10 @@
 name: 🤖 AI Issue Triage
 
 # ============================================================
-# AI 自动 Issue 分类工作流
+# AI 自动 Issue 分类（Claude Code CLI 执行）
 # ============================================================
-# 触发方式: 新 Issue 创建
-#
-# 工作流程:
-#   Issue → Claude 分析 → 添加标签 → 自动回复
+# 触发: 新 Issue 创建
+# 流程: Claude Code 读取 Issue → 分析 → 打标签 → 自动回复
 # ============================================================
 
 on:
@@ -14,7 +12,7 @@ on:
     types: [opened]
 
 permissions:
-  issues: write       # 用于添加标签和评论
+  issues: write
   contents: read
 
 jobs:
@@ -23,26 +21,52 @@ jobs:
     timeout-minutes: 10
 
     env:
-      # AI Provider 配置: 设置任一 API Key 即可，脚本自动检测
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+      ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_HAIKU_MODEL }}
+      ANTHROPIC_DEFAULT_OPUS_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_OPUS_MODEL }}
+      CLAUDE_CODE_DISABLE_1M_CONTEXT: "0"
       GH_TOKEN: ${{ github.token }}
-      GITHUB_REPOSITORY: ${{ github.repository }}
       ISSUE_NUMBER: ${{ github.event.issue.number }}
 
     steps:
       - name: 📥 检出代码
         uses: actions/checkout@v4
 
-      - name: 🐍 设置 Python
-        uses: actions/setup-python@v5
+      - name: 🟢 安装 Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: "3.11"
+          node-version: "20"
 
-      - name: 📦 安装依赖
-        run: |
-          pip install anthropic openai --quiet
+      - name: 📦 安装 Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
 
-      - name: 🤖 执行 AI 分类
+      - name: 🤖 Claude Code 自动分类
         run: |
-          python .github/scripts/ai_triage_issue.py
+          claude -p "
+          你是一个 Issue 分类助手。请处理 Issue #$ISSUE_NUMBER。
+
+          1. 读取 Issue:
+             gh issue view $ISSUE_NUMBER --repo ${{ github.repository }} --json title,body,author,labels,createdAt
+
+          2. 分析并分类:
+             - 类别: bug | enhancement | question | documentation
+             - 优先级: P0(关键) | P1(高) | P2(中) | P3(低)
+             - 是否适合 AI 自动修复（描述清晰、范围小）
+
+          3. 添加标签（使用 gh issue edit --add-label）:
+             - 类别标签
+             - 优先级标签（如果标签不存在，先 gh label create）
+             - 如果适合 AI 修复，添加 ai-fix 标签
+
+          4. 在 Issue 中回复分类结果:
+             gh issue comment $ISSUE_NUMBER --repo ${{ github.repository }} \
+               --body '分类结果（包含类别、优先级、是否可AI修复）'
+
+          ⚠️ 跳过 bot 创建的 Issue（作者名包含 [bot]）。
+          ⚠️ 如果 Issue 已有分类标签则跳过。
+          " \
+            --allowedTools "Read,Bash(gh:*)" \
+            --output-format text \
+            --verbose

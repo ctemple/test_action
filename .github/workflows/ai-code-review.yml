@@ -1,19 +1,10 @@
 name: 🤖 AI Code Review
 
 # ============================================================
-# AI 自动代码审查工作流
+# AI 自动代码审查（Claude Code CLI 执行）
 # ============================================================
-# 触发方式:
-#   1. PR 被创建或更新
-#   2. 在 PR 评论中输入 "/ai-review"
-#
-# 审查维度:
-#   🐛 Bug / 逻辑错误
-#   🔒 安全漏洞
-#   ⚡ 性能问题
-#   📐 代码风格 / 最佳实践
-#   🧪 测试覆盖建议
-#   📖 文档 / 注释完整性
+# 触发: PR 创建/更新 / 评论 /ai-review
+# 审查维度: Bug / 安全 / 性能 / 风格 / 测试 / 文档
 # ============================================================
 
 on:
@@ -24,17 +15,15 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write   # 用于提交 PR Review
-  issues: write          # 用于在 PR 中评论
+  pull-requests: write
+  issues: write
 
-# 避免同时运行多个审查（对同一 PR 的新提交会取消旧的运行）
 concurrency:
   group: ai-review-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: true
 
 jobs:
   ai-review:
-    # PR 事件直接运行; PR 评论事件需要检查是否为 "/ai-review" 指令
     if: |
       github.event_name == 'pull_request' ||
       (github.event_name == 'pull_request_review_comment' &&
@@ -47,11 +36,13 @@ jobs:
     timeout-minutes: 20
 
     env:
-      # AI Provider 配置: 设置任一 API Key 即可，脚本自动检测
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+      ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_HAIKU_MODEL }}
+      ANTHROPIC_DEFAULT_OPUS_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_OPUS_MODEL }}
+      CLAUDE_CODE_DISABLE_1M_CONTEXT: "0"
       GH_TOKEN: ${{ github.token }}
-      GITHUB_REPOSITORY: ${{ github.repository }}
 
     steps:
       - name: 📥 检出代码
@@ -59,14 +50,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 🐍 设置 Python
-        uses: actions/setup-python@v5
+      - name: 🟢 安装 Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: "3.11"
+          node-version: "20"
 
-      - name: 📦 安装依赖
-        run: |
-          pip install anthropic openai --quiet
+      - name: 📦 安装 Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
 
       - name: 🔍 提取 PR 编号
         id: pr
@@ -77,16 +67,49 @@ jobs:
             echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: 🤖 执行 AI 代码审查
+      - name: 🤖 Claude Code 代码审查
         env:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
-          REQUEST_CHANGES_ON_ISSUES: "true"
         run: |
-          python .github/scripts/ai_review_pr.py
+          claude -p "
+          你是一个资深代码审查专家。请审查 PR #$PR_NUMBER。
 
-      - name: 📝 处理异常
+          1. 获取 PR 信息和 diff：
+             gh pr view $PR_NUMBER --repo ${{ github.repository }} --json title,body,author,headRefName,baseRefName
+             gh pr diff $PR_NUMBER --repo ${{ github.repository }}
+
+          2. 从以下维度审查所有变更：
+             - 🐛 Bug / 逻辑错误（会导致程序故障）
+             - 🔒 安全漏洞（注入攻击、敏感信息泄露等）
+             - ⚡ 性能问题（N+1、不必要循环、内存泄漏等）
+             - 📐 代码风格（命名、重复代码、可读性）
+             - 🧪 测试建议（缺少的测试）
+             - 📖 文档完整性
+
+          3. 输出格式化的审查报告（Markdown），包含：
+             - 评估结论：✅ APPROVE / 💬 COMMENT / ❌ REQUEST_CHANGES
+             - 发现的问题（按严重程度排序：🔴CRITICAL 🟠HIGH 🟡MEDIUM 🔵LOW 💡SUGGESTION）
+             - 每个问题标注文件路径和行号
+             - 值得称赞的地方
+
+          4. 将审查报告保存到 /tmp/review.md
+
+          5. 提交审查：
+             gh pr review $PR_NUMBER --repo ${{ github.repository }} --\$(echo '评估对应的命令: approve/comment/request-changes') --body-file /tmp/review.md
+
+          ⚠️ 重要：
+          - 只报告真正有实际影响的问题
+          - CRITICAL 级别才用 REQUEST_CHANGES
+          - 跳过 AI 自己创建的 PR（标题以 🤖 开头）
+          - 不要审查 lock 文件或第三方库代码
+          " \
+            --allowedTools "Read,Bash(gh:*),Bash(git:*),Write" \
+            --output-format text \
+            --verbose
+
+      - name: 📝 异常处理
         if: failure()
         run: |
           gh pr comment ${{ steps.pr.outputs.number }} \
             --repo ${{ github.repository }} \
-            --body "❌ AI 代码审查遇到技术问题，请查看 [Actions 日志](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) 或请求人工审查。"
+            --body "❌ AI 代码审查遇到问题，请查看 [Actions 日志](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})。"

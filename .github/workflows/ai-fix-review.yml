@@ -1,19 +1,10 @@
 name: 🤖 AI Fix Review
 
 # ============================================================
-# AI 自动修复审查意见工作流
+# AI 自动修复审查意见（Claude Code CLI 执行）
 # ============================================================
-# 触发方式:
-#   1. PR Review 提交且状态为 CHANGES_REQUESTED（AI 审查不通过）
-#   2. PR 评论 "/ai-fix-review"
-#
-# 工作流程:
-#   Review 不通过 → 读取审查意见 → AI 修复 → 推送新 commit → 重新触发审查
-#
-# 安全机制:
-#   - 最多自动修复 2 轮，防止死循环
-#   - 仅处理 AI 自己的 Review
-#   - 仅修复 CRITICAL 和 HIGH 级别的问题
+# 触发: AI Review 不通过 / 评论 /ai-fix-review
+# 流程: Claude Code 读审查意见 → 修复严重问题 → 推送 → 重新审查
 # ============================================================
 
 on:
@@ -29,9 +20,6 @@ permissions:
 
 jobs:
   fix-review:
-    # 触发条件:
-    # 1. AI Review 提交了 CHANGES_REQUESTED
-    # 2. PR 评论 "/ai-fix-review"
     if: |
       (github.event_name == 'pull_request_review' &&
        github.event.review.state == 'changes_requested') ||
@@ -46,10 +34,13 @@ jobs:
     timeout-minutes: 20
 
     env:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+      ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_HAIKU_MODEL }}
+      ANTHROPIC_DEFAULT_OPUS_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_OPUS_MODEL }}
+      CLAUDE_CODE_DISABLE_1M_CONTEXT: "0"
       GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
-      GITHUB_REPOSITORY: ${{ github.repository }}
 
     steps:
       - name: 📥 检出代码
@@ -57,14 +48,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 🐍 设置 Python
-        uses: actions/setup-python@v5
+      - name: 🟢 安装 Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: "3.11"
+          node-version: "20"
 
-      - name: 📦 安装依赖
-        run: |
-          pip install anthropic openai --quiet
+      - name: 📦 安装 Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
 
       - name: 🔧 配置 Git
         run: |
@@ -80,8 +70,40 @@ jobs:
             echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: 🤖 执行 AI 修复审查意见
+      - name: 🤖 Claude Code 修复审查意见
         env:
           PR_NUMBER: ${{ steps.pr.outputs.number }}
         run: |
-          python .github/scripts/ai_fix_review.py
+          claude -p "
+          你是一个代码修复专家。PR #$PR_NUMBER 的 AI 代码审查未通过，请修复严重问题。
+
+          1. 获取 PR 信息和审查意见：
+             gh pr view $PR_NUMBER --repo ${{ github.repository }} --json title,headRefName,reviews
+             gh pr diff $PR_NUMBER --repo ${{ github.repository }}
+
+          2. 找到最新的 AI 审查意见（github-actions 提交的 Review），提取 CRITICAL 和 HIGH 级别的问题。
+
+          3. 切换到 PR 分支：
+             BRANCH=\$(gh pr view $PR_NUMBER --repo ${{ github.repository }} --json headRefName --jq '.headRefName')
+             git fetch origin \$BRANCH
+             git checkout \$BRANCH
+
+          4. 检查修复轮数：
+             如果 git log 中已有 2 个以上 'fix: AI review fix' 提交，则停止修复并评论提示人工介入。
+
+          5. 修复 CRITICAL 和 HIGH 级别的问题。
+
+          6. 提交并推送：
+             git add .
+             git commit -m 'fix: AI review fix - <简要描述>'
+             git push origin \$BRANCH
+
+          7. 在 PR 中评论修复摘要。
+
+          ⚠️ 最多修复 2 轮，防止死循环。
+          ⚠️ 只修复 CRITICAL 和 HIGH 问题。
+          ⚠️ 只响应 AI 自己的 Review。
+          " \
+            --allowedTools "Read,Write,Edit,Bash(git:*),Bash(gh:*),Glob,Grep" \
+            --output-format text \
+            --verbose

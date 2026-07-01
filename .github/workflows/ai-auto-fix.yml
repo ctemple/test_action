@@ -1,14 +1,10 @@
 name: 🤖 AI Auto-Fix Issue
 
 # ============================================================
-# AI 自动修复 Issue 工作流
+# AI 自动修复 Issue → PR（Claude Code CLI 执行）
 # ============================================================
-# 触发方式:
-#   1. Issue 被标记 "ai-fix" 标签
-#   2. 在 Issue 评论中输入 "/ai-fix"
-#
-# 工作流程:
-#   Issue → Claude 分析 → 生成代码 → 创建分支 → 提交 PR → 评论通知
+# 触发: Issue 打 ai-fix 标签 / 评论 /ai-fix
+# 流程: Claude Code 读取 Issue → 分析代码 → 修改文件 → 创建 PR
 # ============================================================
 
 on:
@@ -18,15 +14,12 @@ on:
     types: [created]
 
 permissions:
-  contents: write        # 用于创建分支和提交代码
-  pull-requests: write   # 用于创建 PR
-  issues: write          # 用于在 Issue 中添加评论
+  contents: write
+  pull-requests: write
+  issues: write
 
 jobs:
   ai-fix:
-    # 仅在以下条件触发:
-    # 1. Issue 被标记 "ai-fix"
-    # 2. Issue 评论内容为 "/ai-fix"（且评论者是仓库成员）
     if: |
       (github.event.action == 'labeled' && github.event.label.name == 'ai-fix') ||
       (github.event.action == 'created' &&
@@ -39,28 +32,27 @@ jobs:
     timeout-minutes: 30
 
     env:
-      # AI Provider 配置: 设置任一 API Key 即可，脚本自动检测
-      # 优先级: AI_PROVIDER 环境变量 > ANTHROPIC_API_KEY > DEEPSEEK_API_KEY > OPENAI_API_KEY
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-      # 优先用 PAT（创建的 PR 能自动触发 CI/Review，无需审批）
+      ANTHROPIC_BASE_URL: ${{ secrets.ANTHROPIC_BASE_URL }}
+      ANTHROPIC_AUTH_TOKEN: ${{ secrets.ANTHROPIC_AUTH_TOKEN }}
+      ANTHROPIC_MODEL: ${{ secrets.ANTHROPIC_MODEL }}
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_HAIKU_MODEL }}
+      ANTHROPIC_DEFAULT_OPUS_MODEL: ${{ secrets.ANTHROPIC_DEFAULT_OPUS_MODEL }}
+      CLAUDE_CODE_DISABLE_1M_CONTEXT: "0"
       GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
-      GITHUB_REPOSITORY: ${{ github.repository }}
 
     steps:
       - name: 📥 检出代码
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # 完整历史，用于分支操作
+          fetch-depth: 0
 
-      - name: 🐍 设置 Python
-        uses: actions/setup-python@v5
+      - name: 🟢 安装 Node.js
+        uses: actions/setup-node@v4
         with:
-          python-version: "3.11"
+          node-version: "20"
 
-      - name: 📦 安装依赖
-        run: |
-          pip install anthropic openai --quiet
+      - name: 📦 安装 Claude Code CLI
+        run: npm install -g @anthropic-ai/claude-code
 
       - name: 🔧 配置 Git
         run: |
@@ -76,17 +68,56 @@ jobs:
             echo "number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
           fi
 
-      - name: 🤖 执行 AI 修复
+      - name: 🤖 Claude Code 自动修复
         env:
           ISSUE_NUMBER: ${{ steps.issue.outputs.number }}
-          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
         run: |
-          python .github/scripts/ai_fix_issue.py
+          claude -p "
+          你是一个软件工程师 AI。请完成以下任务：
 
-      - name: 📝 处理结果
+          1. 读取 GitHub Issue #$ISSUE_NUMBER 的内容：
+             gh issue view $ISSUE_NUMBER --repo ${{ github.repository }} --json title,body,labels
+
+          2. 分析 Issue 内容，理解需求或 Bug。
+
+          3. 扫描仓库结构，定位需要修改的文件。使用 Glob 和 Grep 搜索相关代码。
+
+          4. 实现修复或功能：
+             - 修改现有文件使用 Edit 工具
+             - 创建新文件使用 Write 工具
+             - 确保代码风格与项目一致
+
+          5. 提交前自我审查：
+             - 用 git diff --cached 查看所有变更
+             - 仔细审查是否有逻辑错误、安全漏洞、性能问题
+             - 如果发现严重问题，修复后再审查
+             - 自审通过后才提交
+
+          6. Git 操作：
+             - 创建分支: git checkout -b ai/fix-issue-$ISSUE_NUMBER
+             - 添加文件: git add .
+             - 提交: git commit -m 'feat/fix: ...'
+             - 推送: git push origin ai/fix-issue-$ISSUE_NUMBER
+
+          7. 创建 PR:
+             gh pr create --repo ${{ github.repository }} --base main --head ai/fix-issue-$ISSUE_NUMBER \
+               --title '描述性标题' --body 'PR 描述（包含自审结论）'
+
+          8. 在 Issue 中回复 PR 链接:
+             gh issue comment $ISSUE_NUMBER --repo ${{ github.repository }} --body '🤖 AI 已生成修复 PR: <链接>'
+
+          ⚠️ 重要：
+          - 分支名必须是 ai/fix-issue-$ISSUE_NUMBER
+          - PR 描述中要包含自审结论
+          - commit message 遵循 conventional commits 格式
+          " \
+            --allowedTools "Read,Write,Edit,Bash(git:*),Bash(gh:*),Glob,Grep" \
+            --output-format text \
+            --verbose
+
+      - name: 📝 异常处理
         if: failure()
         run: |
-          echo "AI 修复流程失败，请在 Issue 中查看详情"
           gh issue comment ${{ steps.issue.outputs.number }} \
             --repo ${{ github.repository }} \
-            --body "❌ AI 自动修复遇到问题，请查看 [Actions 日志](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) 了解详情。"
+            --body "❌ AI 自动修复遇到问题，请查看 [Actions 日志](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})。"
