@@ -382,22 +382,46 @@ def _generate_modify_patch(file_spec: dict, file_content: str, plan: dict, issue
 
 
 def _parse_json(content: str) -> dict:
-    """从 AI 响应中解析 JSON。"""
+    """从 AI 响应中解析 JSON，支持多种格式。"""
+    if not content:
+        print("    [DEBUG] _parse_json: 空内容")
+        return None
+
     json_str = content
+
+    # 策略1: markdown 代码块
     json_match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
     if json_match:
         json_str = json_match.group(1)
 
+    # 策略2: 直接解析
     try:
         return json.loads(json_str)
     except json.JSONDecodeError:
-        start = json_str.find('{')
-        end = json_str.rfind('}')
-        if start != -1 and end != -1:
-            try:
-                return json.loads(json_str[start:end + 1])
-            except json.JSONDecodeError:
-                pass
+        pass
+
+    # 策略3: 找到第一个 { 和最后一个 }
+    start = json_str.find('{')
+    end = json_str.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        try:
+            return json.loads(json_str[start:end + 1])
+        except json.JSONDecodeError:
+            pass
+
+    # 策略4: 尝试修复常见问题 (尾部逗号、注释等)
+    try:
+        cleaned = re.sub(r'//.*?\n', '\n', json_str)  # 去掉单行注释
+        cleaned = re.sub(r',\s*}', '}', cleaned)       # 去掉尾部逗号
+        cleaned = re.sub(r',\s*]', ']', cleaned)
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # 调试: 打印原始内容的前 500 字符
+    print(f"    [DEBUG] 无法解析 JSON，原始响应前500字符:")
+    print(f"    {content[:500]}")
+
     return None
 
 
