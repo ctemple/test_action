@@ -100,7 +100,7 @@ gh label create P2 --color "FFA500" && gh label create P3 --color "4ECDC4"
 4. 判断是否适合 AI 修复
 5. 添加对应标签 → 适合的加 `ai-clarifying`，进入 Clarify
 
-### 2️⃣ 💬 AI Clarify — 需求澄清，Auto-Coder 的前置关卡 🆕
+### 2️⃣ 💬 AI Clarify — 需求澄清，Auto-Fix 的前置关卡 🆕
 
 | 触发 | 说明 |
 |------|------|
@@ -113,11 +113,11 @@ gh label create P2 --color "FFA500" && gh label create P3 --color "4ECDC4"
 2. 读取项目中相关代码文件（`Read` / `Glob`）
 3. 综合判断需求是否明确（做什么、在哪里、期望结果、技术可行性）
 4. ❓ **不明确** → 评论 2-3 个具体问题 → 保持 `ai-clarifying` → **等待真人回复**
-5. ✅ **明确** → 评论需求确认总结 → 移除 `ai-clarifying` → 添加 `ai-fix` → Auto-Coder 启动
+5. ✅ **明确** → 评论需求确认总结 → 移除 `ai-clarifying` → 添加 `ai-fix` → Auto-Fix 启动
 
-> `/ai-fix` 指令可绕过 Clarify，直接触发 Auto-Coder（适合需求已明确的情况）
+> `/ai-fix` 指令可绕过 Clarify，直接触发 Auto-Fix（适合需求已明确的情况）
 
-### 3️⃣ 🤖 AI Auto-Coder — Issue → 代码 → PR
+### 3️⃣ 🤖 AI Auto-Fix — Issue → 代码 → PR
 
 | 触发 | 说明 |
 |------|------|
@@ -180,7 +180,7 @@ Claude Code CLI (DeepSeek 兼容端点)
 │   └── workflows/
 │       ├── ai-issue-triage.yml         # 1️⃣ AI Triage
 │       ├── ai-clarify.yml              # 2️⃣ AI Clarify
-│       ├── ai-auto-coder.yml           # 3️⃣ AI Auto-Coder
+│       ├── ai-auto-fix.yml             # 3️⃣ AI Auto-Fix
 │       ├── ai-code-review.yml          # 4️⃣ AI Code Review
 │       └── ai-fix-review.yml           # 5️⃣ AI Fix Review
 ├── README.md
