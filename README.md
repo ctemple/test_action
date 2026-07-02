@@ -85,9 +85,22 @@ gh label create P2 --color "FFA500" && gh label create P3 --color "4ECDC4"
 
 ---
 
-## 📋 五个工作流
+## 📋 五个工作流（按执行顺序）
 
-### 💬 AI Clarify — 需求澄清，Auto-Fix 的前置关卡 🆕
+### 1️⃣ 🏷️ AI Triage — 新 Issue → 自动分类
+
+| 触发 | 说明 |
+|------|------|
+| 新 Issue 创建 | 自动运行 |
+
+**执行流程**:
+1. 读取 Issue 标题和内容
+2. 分析类别（bug / enhancement / question / documentation）
+3. 评估优先级（P0-P3）
+4. 判断是否适合 AI 修复
+5. 添加对应标签 → 适合的加 `ai-clarifying`，进入 Clarify
+
+### 2️⃣ 💬 AI Clarify — 需求澄清，Auto-Coder 的前置关卡 🆕
 
 | 触发 | 说明 |
 |------|------|
@@ -100,30 +113,29 @@ gh label create P2 --color "FFA500" && gh label create P3 --color "4ECDC4"
 2. 读取项目中相关代码文件（`Read` / `Glob`）
 3. 综合判断需求是否明确（做什么、在哪里、期望结果、技术可行性）
 4. ❓ **不明确** → 评论 2-3 个具体问题 → 保持 `ai-clarifying` → **等待真人回复**
-5. ✅ **明确** → 评论需求确认总结 → 移除 `ai-clarifying` → 添加 `ai-fix` → Auto-Fix 启动
+5. ✅ **明确** → 评论需求确认总结 → 移除 `ai-clarifying` → 添加 `ai-fix` → Auto-Coder 启动
 
-**触发链**: `Triage → ai-clarifying → Clarify → ai-fix → Auto-Fix`
+> `/ai-fix` 指令可绕过 Clarify，直接触发 Auto-Coder（适合需求已明确的情况）
 
-> `/ai-fix` 指令可以绕过 Clarify 直接启动 Auto-Fix（适合需求已明确的情况）
-
-### 🤖 AI Auto-Fix — Issue → 代码 → PR
+### 3️⃣ 🤖 AI Auto-Coder — Issue → 代码 → PR
 
 | 触发 | 说明 |
 |------|------|
-| Issue 打 `ai-fix` 标签 | 自动 |
-| Issue 评论 `/ai-fix` | 仅协作者 |
+| Issue 打 `ai-fix` 标签 | 自动（由 Clarify 确认后添加） |
+| Issue 评论 `/ai-fix` | 仅协作者（直接触发，绕过 Clarify） |
 
 Claude Code CLI 自主执行：
-1. `gh issue view` 读取 Issue
-2. `Glob` / `Grep` 搜索代码库
-3. `Read` 读取相关文件
-4. `Edit` / `Write` 修改代码
-5. `git diff` 自审变更
-6. `git commit` + `git push` 推送
-7. `gh pr create` 创建 PR
-8. `gh issue comment` 回复链接
+1. **需求检查** — 如果需求模糊，转 Clarify 澄清
+2. `gh issue view` 读取 Issue
+3. `Glob` / `Grep` 搜索代码库
+4. `Read` 读取相关文件
+5. `Edit` / `Write` 修改代码
+6. `git diff` 自审变更（致命问题必须修复）
+7. `git commit` + `git push` 推送
+8. `gh pr create` 创建 PR
+9. `gh issue comment` 回复链接
 
-### 🔍 AI Code Review — PR → 审查 → Review
+### 4️⃣ 🔍 AI Code Review — PR → 审查 → Review
 
 | 触发 | 说明 |
 |------|------|
@@ -132,7 +144,7 @@ Claude Code CLI 自主执行：
 
 审查维度：🐛 Bug · 🔒 安全 · ⚡ 性能 · 📐 风格 · 🧪 测试 · 📖 文档
 
-### 🔧 AI Fix Review — 不通过 → 修复 → 重新审查
+### 5️⃣ 🔧 AI Fix Review — 不通过 → 修复 → 重新审查
 
 | 触发 | 说明 |
 |------|------|
@@ -140,10 +152,6 @@ Claude Code CLI 自主执行：
 | PR 评论 `/ai-fix-review` | 手动 |
 
 最多自动修复 2 轮，防止死循环。仅修复 CRITICAL 和 HIGH 级别问题。
-
-### 🏷️ AI Triage — 新 Issue → 自动分类
-
-新 Issue 创建时自动运行：分析类别 → 评估优先级 → 添加标签 → 自动回复。
 
 ---
 
@@ -170,10 +178,11 @@ Claude Code CLI (DeepSeek 兼容端点)
 .
 ├── .github/
 │   └── workflows/
-│       ├── ai-auto-fix.yml             # AI 自动修复
-│       ├── ai-code-review.yml          # AI 代码审查
-│       ├── ai-fix-review.yml           # AI 修复审查意见
-│       └── ai-issue-triage.yml         # AI 自动分类
+│       ├── ai-issue-triage.yml         # 1️⃣ AI Triage
+│       ├── ai-clarify.yml              # 2️⃣ AI Clarify
+│       ├── ai-auto-coder.yml           # 3️⃣ AI Auto-Coder
+│       ├── ai-code-review.yml          # 4️⃣ AI Code Review
+│       └── ai-fix-review.yml           # 5️⃣ AI Fix Review
 ├── README.md
 └── .gitignore
 ```
