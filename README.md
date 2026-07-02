@@ -11,31 +11,44 @@
                          │
                          ▼
                     🏷️ AI Triage
-                    (自动分类)
-                         │
-                         ▼
-                    💬 AI Clarify 🆕
-                    (需求不明确→提问→明确→总结)
-                         │
-                         ▼
-                    🔧 AI Auto-Fix
-                    (写代码→自审→PR)
-                         │
-                         ▼
-                    🔍 AI Code Review
-                    (自动审查)
+                    (分类打标签)
                          │
                     ┌────┴────┐
                     ▼         ▼
-                  ✅ 通过   ❌ 不通过
+               ❌ 不适合    ✅ 适合AI
+               AI修复       ai-clarifying
                     │         │
                     │         ▼
-                    │    🔧 AI Fix Review
-                    │    (修复→推送)
+                    │    💬 AI Clarify
+                    │    (读Issue+代码)
+                    │    (提问↔回答)
                     │         │
-                    └─────────┘
+                    │    ┌────┴────┐
+                    │    ▼         ▼
+                    │  ❓不明确   ✅明确
+                    │   (等待     ai-fix
+                    │   回复)      │
+                    │         ┌────┘
+                    │         ▼
+                    │    🔧 AI Auto-Fix
+                    │    (写代码→自审→PR)
+                    │         │
+                    │         ▼
+                    │    🔍 AI Code Review
+                    │    (自动审查)
+                    │         │
+                    │    ┌────┴────┐
+                    │    ▼         ▼
+                    │  ✅ 通过   ❌ 不通过
+                    │    │         │
+                    │    │    🔧 AI Fix Review
+                    │    │    (修复→推送)
+                    │    │         │
+                    │    └────┬────┘
+                    │         │
+                    └────┬────┘
                          │
-                         └── 审查→修复循环 ─┘
+                         └── ✅ Complete
 ```
 
 ---
@@ -74,18 +87,24 @@ gh label create P2 --color "FFA500" && gh label create P3 --color "4ECDC4"
 
 ## 📋 五个工作流
 
-### 💬 AI Clarify — 需求澄清 🆕
+### 💬 AI Clarify — 需求澄清，Auto-Fix 的前置关卡 🆕
 
 | 触发 | 说明 |
 |------|------|
-| Issue 打 `ai-clarifying` 标签 | 进入澄清模式 |
-| Issue 有新评论（作者回复） | AI 重新评估需求 |
+| Issue 打 `ai-clarifying` 标签 | Triage 自动添加，进入澄清 |
+| Issue 有真人回复 | 作者/Collaborator 回复后重新评估 |
+| ❌ AI 自己评论 | 不触发（过滤 bot 和 `## ❓` `## ✅` 前缀） |
 
 **执行流程**:
-1. AI 读取 Issue 和所有评论
-2. 评估需求是否明确（做什么、在哪里、期望结果）
-3. ❓ **不明确** → 评论 2-3 个具体问题 → 保持 `ai-clarifying` 标签
-4. ✅ **明确** → 评论需求确认总结 → 移除 `ai-clarifying` → 添加 `ai-fix` → 进入 Auto-Fix
+1. 读取完整 Issue + 所有历史评论（`gh issue view --comments`）
+2. 读取项目中相关代码文件（`Read` / `Glob`）
+3. 综合判断需求是否明确（做什么、在哪里、期望结果、技术可行性）
+4. ❓ **不明确** → 评论 2-3 个具体问题 → 保持 `ai-clarifying` → **等待真人回复**
+5. ✅ **明确** → 评论需求确认总结 → 移除 `ai-clarifying` → 添加 `ai-fix` → Auto-Fix 启动
+
+**触发链**: `Triage → ai-clarifying → Clarify → ai-fix → Auto-Fix`
+
+> `/ai-fix` 指令可以绕过 Clarify 直接启动 Auto-Fix（适合需求已明确的情况）
 
 ### 🤖 AI Auto-Fix — Issue → 代码 → PR
 
