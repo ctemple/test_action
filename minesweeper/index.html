@@ -155,6 +155,175 @@
     color: #000;
     text-align: center;
   }
+
+  /* Victory overlay */
+  .victory-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .victory-overlay.show {
+    display: flex;
+  }
+
+  .victory-dialog {
+    background-color: #c0c0c0;
+    border: 3px solid;
+    border-color: #ffffff #808080 #808080 #ffffff;
+    padding: 2px;
+    min-width: 280px;
+    animation: dialogPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.3);
+  }
+
+  .victory-title-bar {
+    background: linear-gradient(90deg, #000080, #1084d0);
+    color: white;
+    padding: 3px 6px;
+    font-size: 12px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .victory-body {
+    padding: 16px 20px 12px;
+    text-align: center;
+    background-color: #c0c0c0;
+  }
+
+  .victory-icon {
+    font-size: 48px;
+    display: block;
+    margin-bottom: 8px;
+    animation: trophyBounce 0.6s ease-out 0.3s both;
+  }
+
+  .victory-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #000080;
+    margin-bottom: 4px;
+  }
+
+  .victory-subtitle {
+    font-size: 12px;
+    color: #000;
+    margin-bottom: 10px;
+  }
+
+  .victory-btn {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 12px;
+    padding: 4px 24px;
+    min-width: 75px;
+    cursor: pointer;
+    border: 2px solid;
+    border-color: #ffffff #808080 #808080 #ffffff;
+    background-color: #c0c0c0;
+    outline: none;
+  }
+
+  .victory-btn:active {
+    border-color: #808080 #ffffff #ffffff #808080;
+  }
+
+  /* Confetti / fireworks particles */
+  .confetti-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1001;
+    overflow: hidden;
+  }
+
+  .confetti-particle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    opacity: 0;
+    animation: confettiFall var(--fall-duration, 2.5s) ease-out forwards;
+  }
+
+  @keyframes confettiFall {
+    0% {
+      opacity: 1;
+      transform: translate(0, 0) rotate(0deg) scale(1);
+    }
+    15% {
+      opacity: 1;
+      transform: translate(var(--drift-x1), var(--rise, -120px)) rotate(var(--spin1, 180deg)) scale(1.2);
+    }
+    50% {
+      opacity: 0.9;
+      transform: translate(var(--drift-x2), calc(var(--rise, -120px) + 200px)) rotate(var(--spin2, 360deg)) scale(0.9);
+    }
+    85% {
+      opacity: 0.4;
+      transform: translate(var(--drift-x3), calc(var(--rise, -120px) + 380px)) rotate(var(--spin3, 540deg)) scale(0.6);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(var(--drift-x4), calc(var(--rise, -120px) + 500px)) rotate(var(--spin4, 720deg)) scale(0.2);
+    }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes dialogPop {
+    from { transform: scale(0.5); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  @keyframes trophyBounce {
+    0% { transform: scale(0) rotate(-20deg); }
+    50% { transform: scale(1.3) rotate(10deg); }
+    100% { transform: scale(1) rotate(0deg); }
+  }
+
+  /* Firework burst effect */
+  .firework-burst {
+    position: fixed;
+    pointer-events: none;
+    z-index: 1002;
+    width: 0;
+    height: 0;
+  }
+
+  .firework-spark {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 0;
+    animation: sparkFly 1.5s ease-out forwards;
+  }
+
+  @keyframes sparkFly {
+    0% {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(var(--sx), var(--sy)) scale(0);
+    }
+  }
 </style>
 </head>
 <body>
@@ -177,6 +346,24 @@
     左键翻开 | 右键标记/取消旗帜 🚩
   </div>
 </div>
+
+<!-- Victory overlay -->
+<div class="victory-overlay" id="victory-overlay">
+  <div class="victory-dialog">
+    <div class="victory-title-bar">
+      <span>扫雷</span>
+      <span>✕</span>
+    </div>
+    <div class="victory-body">
+      <span class="victory-icon">🏆</span>
+      <div class="victory-title">恭喜你赢了！</div>
+      <div class="victory-subtitle" id="victory-time"></div>
+      <button class="victory-btn" id="victory-ok-btn">确定</button>
+    </div>
+  </div>
+</div>
+
+<div class="confetti-container" id="confetti-container"></div>
 
 <script>
 (function() {
@@ -209,6 +396,14 @@
     firstClick = true;
     flaggedCount = 0;
     revealedCount = 0;
+
+    // Hide victory overlay
+    const overlay = document.getElementById('victory-overlay');
+    if (overlay) overlay.classList.remove('show');
+
+    // Clear confetti
+    const confettiContainer = document.getElementById('confetti-container');
+    if (confettiContainer) confettiContainer.innerHTML = '';
 
     timerEl.textContent = '000';
     mineCounterEl.textContent = formatNumber(TOTAL_MINES);
@@ -427,7 +622,138 @@
         }
       }
       mineCounterEl.textContent = '000';
+
+      // Trigger victory celebration
+      setTimeout(() => {
+        triggerVictoryCelebration();
+      }, 200);
     }
+  }
+
+  function triggerVictoryCelebration() {
+    // Show victory dialog
+    const overlay = document.getElementById('victory-overlay');
+    const timeEl = document.getElementById('victory-time');
+    timeEl.textContent = '用时 ' + seconds + ' 秒';
+    overlay.classList.add('show');
+
+    // Spawn confetti particles
+    spawnConfetti();
+
+    // Spawn firework bursts
+    spawnFireworks();
+
+    // Hide overlay on button click or after a few seconds
+    const okBtn = document.getElementById('victory-ok-btn');
+    const dismissOverlay = () => {
+      overlay.classList.remove('show');
+      okBtn.removeEventListener('click', dismissOverlay);
+    };
+    okBtn.addEventListener('click', dismissOverlay);
+
+    // Also allow clicking the overlay background to dismiss
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        dismissOverlay();
+      }
+    });
+  }
+
+  function spawnConfetti() {
+    const container = document.getElementById('confetti-container');
+    const colors = [
+      '#ff0000', '#0000ff', '#008000', '#ffff00', '#ff00ff',
+      '#00ffff', '#ff8800', '#000080', '#800000', '#008080',
+      '#ffffff', '#ffcc00', '#00ff00', '#ff0066', '#00ccff'
+    ];
+
+    for (let i = 0; i < 80; i++) {
+      const particle = document.createElement('div');
+      particle.className = 'confetti-particle';
+
+      const startX = Math.random() * 100;
+      const drift = (Math.random() - 0.5) * 400;
+      const fallDuration = 2.5 + Math.random() * 2.0;
+      const delay = Math.random() * 0.5;
+
+      particle.style.cssText = `
+        left: ${startX}%;
+        top: -20px;
+        background-color: ${colors[Math.floor(Math.random() * colors.length)]};
+        --fall-duration: ${fallDuration}s;
+        --drift-x1: ${drift * 0.3}px;
+        --drift-x2: ${drift * 0.6}px;
+        --drift-x3: ${drift * 0.8}px;
+        --drift-x4: ${drift}px;
+        --rise: ${-80 - Math.random() * 80}px;
+        --spin1: ${Math.random() * 360}deg;
+        --spin2: ${Math.random() * 720}deg;
+        --spin3: ${Math.random() * 1080}deg;
+        --spin4: ${Math.random() * 1440}deg;
+        animation-delay: ${delay}s;
+        width: ${6 + Math.random() * 10}px;
+        height: ${6 + Math.random() * 10}px;
+      `;
+
+      container.appendChild(particle);
+
+      // Clean up after animation
+      setTimeout(() => {
+        if (particle.parentNode) {
+          particle.parentNode.removeChild(particle);
+        }
+      }, (fallDuration + delay) * 1000 + 200);
+    }
+  }
+
+  function spawnFireworks() {
+    const container = document.getElementById('confetti-container');
+    const colors = ['#ff0000', '#ffff00', '#00ff00', '#00ffff', '#ff00ff',
+                     '#ff8800', '#ffffff', '#0088ff'];
+
+    // Spawn 3 firework bursts at staggered times
+    const bursts = [
+      { x: 30, y: 30, delay: 400 },
+      { x: 70, y: 25, delay: 700 },
+      { x: 50, y: 40, delay: 1000 }
+    ];
+
+    bursts.forEach(burst => {
+      setTimeout(() => {
+        const burstEl = document.createElement('div');
+        burstEl.className = 'firework-burst';
+        burstEl.style.left = burst.x + '%';
+        burstEl.style.top = burst.y + '%';
+
+        const sparkCount = 24;
+        for (let i = 0; i < sparkCount; i++) {
+          const spark = document.createElement('div');
+          spark.className = 'firework-spark';
+          const angle = (i / sparkCount) * Math.PI * 2;
+          const distance = 60 + Math.random() * 80;
+          const sx = Math.cos(angle) * distance;
+          const sy = Math.sin(angle) * distance;
+          spark.style.cssText = `
+            background-color: ${colors[Math.floor(Math.random() * colors.length)]};
+            --sx: ${sx}px;
+            --sy: ${sy}px;
+            width: ${4 + Math.random() * 6}px;
+            height: ${4 + Math.random() * 6}px;
+            animation-duration: ${1.0 + Math.random() * 0.8}s;
+          `;
+          burstEl.appendChild(spark);
+        }
+
+        container.appendChild(burstEl);
+
+        // Clean up after animation
+        setTimeout(() => {
+          if (burstEl.parentNode) {
+            burstEl.parentNode.removeChild(burstEl);
+          }
+        }, 2000);
+      }, burst.delay);
+    });
   }
 
   // Face button click - restart
