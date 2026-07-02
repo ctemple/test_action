@@ -80,10 +80,15 @@ jobs:
           claude -p "
           你是一个需求分析师。请处理 Issue #$ISSUE_NUMBER。
 
-          1. 读取 Issue 内容和所有评论：
+          1. 读取 Issue 完整内容和所有评论（了解来龙去脉）：
              gh issue view $ISSUE_NUMBER --repo ${{ github.repository }} --comments --json title,body,comments
 
-          2. 评估需求是否明确。一个「明确」的需求应包含：
+          2. 阅读项目中与需求相关的代码文件：
+             根据 Issue 描述，用 Read 工具读取可能涉及的文件。
+             例如：提到 README 就读取 README.md，提到某个功能就搜索相关代码。
+             只有结合现有代码，才能准确判断需求的可行性和细节。
+
+          3. 评估需求是否明确。一个「明确」的需求应包含：
              - 具体要做什么（功能/Bug）
              - 涉及哪些文件或模块
              - 期望的结果是什么
@@ -109,4 +114,4 @@ jobs:
           - 如果已有 3 轮以上问答仍未明确，建议人工介入并 @ 仓库维护者
           - 提问要具体，不要问开放式问题
           - 如果需求永远无法明确（例如过于模糊），说明原因并建议关闭 Issue
-          " --allowedTools "Read,Bash(gh:*)" --output-format text --verbose
+          " --allowedTools "Read,Glob,Bash(gh:*)" --output-format text --verbose
