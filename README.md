@@ -1,5 +1,9 @@
 # 🤖 AI-Powered GitHub Workflows
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python](https://img.shields.io/badge/Python-3.10%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
+[![Status](https://img.shields.io/badge/Status-Active-brightgreen)](https://github.com/ctemple/test_action)
+
 基于 **Claude Code CLI + DeepSeek** 的 GitHub Actions 全自动 AI 工作流。Claude Code 直接读取 Issue、搜索代码、修改文件、创建 PR、审查代码——全部自主完成，无需 Python 脚本。
 
 ```
