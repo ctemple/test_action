@@ -1,24 +1,41 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" style="color-scheme: light;">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="light">
 <title>扫雷 - Minesweeper</title>
 <style>
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    color-scheme: light;
+  }
+
   * {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
     user-select: none;
+    -webkit-user-select: none;
   }
 
   body {
+    color-scheme: light;
     background-color: #c0c0c0;
+    color: #000;
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
+    min-height: 100dvh;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 8px;
+    /* Prevent pull-to-refresh and overscroll on mobile */
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: auto;
   }
 
   .game-container {
@@ -26,11 +43,12 @@
     border: 3px solid;
     border-color: #ffffff #808080 #808080 #ffffff;
     padding: 8px;
+    max-width: 100%;
   }
 
   .title-bar {
     background: linear-gradient(90deg, #000080, #1084d0);
-    color: white;
+    color: #ffffff;
     padding: 3px 4px;
     margin-bottom: 4px;
     display: flex;
@@ -63,10 +81,10 @@
     background-color: #000;
     color: #ff0000;
     font-family: 'Consolas', 'Courier New', monospace;
-    font-size: 28px;
+    font-size: clamp(20px, 5vw, 28px);
     font-weight: bold;
     padding: 2px 4px;
-    min-width: 56px;
+    min-width: 48px;
     text-align: center;
     border: 2px solid;
     border-color: #808080 #ffffff #ffffff #808080;
@@ -77,6 +95,8 @@
   .face-btn {
     width: 40px;
     height: 40px;
+    min-width: 44px;
+    min-height: 44px;
     font-size: 24px;
     line-height: 36px;
     text-align: center;
@@ -84,7 +104,9 @@
     border: 2px solid;
     border-color: #ffffff #808080 #808080 #ffffff;
     background-color: #c0c0c0;
+    color: #000;
     outline: none;
+    touch-action: manipulation;
   }
 
   .face-btn:active {
@@ -97,31 +119,47 @@
     border-color: #808080 #ffffff #ffffff #808080;
     gap: 0;
     background-color: #c0c0c0;
+    touch-action: manipulation;
   }
 
   .cell {
-    width: 24px;
-    height: 24px;
-    font-size: 14px;
+    width: var(--cell-size, 24px);
+    height: var(--cell-size, 24px);
+    font-size: calc(var(--cell-size, 24px) * 0.58);
     font-weight: bold;
     text-align: center;
-    line-height: 24px;
+    line-height: var(--cell-size, 24px);
     cursor: pointer;
     border: 2px solid;
     border-color: #ffffff #808080 #808080 #ffffff;
     background-color: #c0c0c0;
+    color: #000;
     outline: none;
     box-sizing: content-box;
+    touch-action: manipulation;
+    /* Prevent iOS tap highlight */
+    -webkit-tap-highlight-color: transparent;
+    /* Prevent context menu on long press */
+    -webkit-touch-callout: none;
+    /* Smooth transition for long-press feedback */
+    transition: border-color 0.1s ease;
   }
 
   .cell:active:not(.revealed) {
     border-color: #808080 #ffffff #ffffff #808080;
   }
 
+  /* Long-press visual feedback (touch flagging) */
+  .cell.long-press {
+    border-color: #808080 #ffffff #ffffff #808080;
+    background-color: #b0b0b0;
+  }
+
   .cell.revealed {
     border: 1px solid #808080;
     background-color: #c0c0c0;
     cursor: default;
+    color: #000;
   }
 
   .cell.flagged {
@@ -154,6 +192,24 @@
     font-size: 11px;
     color: #000;
     text-align: center;
+    line-height: 1.4;
+  }
+
+  .instructions-desktop {
+    display: inline;
+  }
+
+  .instructions-mobile {
+    display: none;
+  }
+
+  /* Show mobile instructions on touch devices (detected via JS) */
+  body.touch-device .instructions-desktop {
+    display: none;
+  }
+
+  body.touch-device .instructions-mobile {
+    display: inline;
   }
 
   /* Victory overlay */
@@ -169,6 +225,7 @@
     justify-content: center;
     align-items: center;
     animation: fadeIn 0.3s ease-out;
+    padding: 16px;
   }
 
   .victory-overlay.show {
@@ -180,14 +237,15 @@
     border: 3px solid;
     border-color: #ffffff #808080 #808080 #ffffff;
     padding: 2px;
-    min-width: 280px;
+    min-width: min(280px, 90vw);
+    max-width: 90vw;
     animation: dialogPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.3);
   }
 
   .victory-title-bar {
     background: linear-gradient(90deg, #000080, #1084d0);
-    color: white;
+    color: #ffffff;
     padding: 3px 6px;
     font-size: 12px;
     font-weight: bold;
@@ -200,6 +258,7 @@
     padding: 16px 20px 12px;
     text-align: center;
     background-color: #c0c0c0;
+    color: #000;
   }
 
   .victory-icon {
@@ -219,19 +278,23 @@
   .victory-subtitle {
     font-size: 12px;
     color: #000;
-    margin-bottom: 10px;
+    margin-bottom: 14px;
   }
 
   .victory-btn {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    font-size: 12px;
-    padding: 4px 24px;
+    font-size: 14px;
+    font-weight: bold;
+    padding: 8px 24px;
     min-width: 75px;
+    min-height: 44px;
     cursor: pointer;
     border: 2px solid;
     border-color: #ffffff #808080 #808080 #ffffff;
     background-color: #c0c0c0;
+    color: #000;
     outline: none;
+    touch-action: manipulation;
   }
 
   .victory-btn:active {
@@ -324,6 +387,56 @@
       transform: translate(var(--sx), var(--sy)) scale(0);
     }
   }
+
+  /* Landscape phone: ensure game fits vertically */
+  @media (max-height: 500px) and (orientation: landscape) {
+    body {
+      align-items: flex-start;
+      padding-top: 4px;
+    }
+
+    .title-bar {
+      padding: 1px 4px;
+      margin-bottom: 2px;
+      font-size: 10px;
+    }
+
+    .status-bar {
+      padding: 2px 6px;
+      margin-bottom: 4px;
+    }
+
+    .instructions {
+      margin-top: 4px;
+      font-size: 10px;
+    }
+  }
+
+  /* Small screens: tighten padding */
+  @media (max-width: 360px) {
+    .game-container {
+      padding: 4px;
+    }
+
+    .status-bar {
+      padding: 3px 4px;
+    }
+
+    .counter {
+      font-size: 18px;
+      min-width: 42px;
+      padding: 1px 3px;
+    }
+
+    .face-btn {
+      width: 36px;
+      height: 36px;
+      min-width: 44px;
+      min-height: 44px;
+      font-size: 20px;
+      line-height: 32px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -343,7 +456,8 @@
   <div class="board" id="board"></div>
 
   <div class="instructions">
-    左键翻开 | 右键标记/取消旗帜 🚩
+    <span class="instructions-desktop">左键翻开 | 右键标记/取消旗帜 🚩</span>
+    <span class="instructions-mobile">点按翻开 | 长按标记/取消旗帜 🚩</span>
   </div>
 </div>
 
@@ -381,11 +495,68 @@
   let timerInterval = null;
   let seconds = 0;
 
+  // Touch state for long-press detection
+  let touchStartTime = 0;
+  let touchStartRow = -1;
+  let touchStartCol = -1;
+  let longPressTimer = null;
+  let isLongPress = false;
+  const LONG_PRESS_DURATION = 500; // ms
+
   const boardEl = document.getElementById('board');
   const mineCounterEl = document.getElementById('mine-counter');
   const timerEl = document.getElementById('timer');
   const faceBtn = document.getElementById('face-btn');
 
+  // ---- Touch device detection ----
+  const isTouchDevice = ('ontouchstart' in window) ||
+    (navigator.maxTouchPoints > 0) ||
+    (navigator.msMaxTouchPoints > 0);
+
+  if (isTouchDevice) {
+    document.body.classList.add('touch-device');
+  }
+
+  // ---- Responsive cell sizing ----
+  function getCellSize() {
+    // Account for game-container borders (3px*2) + padding (8px*2) = 22px
+    // Plus board borders (2px*2) = 4px
+    // Plus cell borders (2px*2 per cell, content-box) — baked into per-cell calc
+    const containerOverhead = 26; // 22 + 4
+    const cellBorderWidth = 4;    // 2px * 2 sides per cell (content-box)
+
+    // Constrain by viewport width
+    const maxWidth = window.innerWidth - 32; // body padding * 2
+    // Constrain by viewport height (landscape), leaving room for status/instructions
+    const maxHeight = window.innerHeight - 220;
+
+    const maxBoardWidth = Math.min(maxWidth, maxHeight);
+    const availableForCells = maxBoardWidth - containerOverhead;
+
+    // Cell content size = (available - 9 * cellBorderWidth) / 9
+    const cellSize = Math.floor((availableForCells - COLS * cellBorderWidth) / COLS);
+
+    return Math.max(16, Math.min(24, cellSize));
+  }
+
+  function updateCellSizes() {
+    const cellSize = getCellSize();
+    boardEl.style.setProperty('--cell-size', cellSize + 'px');
+  }
+
+  // Recalculate on resize (debounced)
+  let resizeTimeout;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(updateCellSizes, 150);
+  });
+
+  // Also recalculate on orientation change
+  window.addEventListener('orientationchange', () => {
+    setTimeout(updateCellSizes, 300);
+  });
+
+  // ---- Game logic ----
   function initBoard() {
     // Clear previous state
     clearInterval(timerInterval);
@@ -396,6 +567,9 @@
     firstClick = true;
     flaggedCount = 0;
     revealedCount = 0;
+
+    // Clear touch state
+    clearLongPressTimer();
 
     // Hide victory overlay
     const overlay = document.getElementById('victory-overlay');
@@ -484,9 +658,21 @@
     return String(n).padStart(3, '0');
   }
 
+  function clearLongPressTimer() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+    isLongPress = false;
+  }
+
   function renderBoard() {
     boardEl.innerHTML = '';
-    boardEl.style.gridTemplateColumns = `repeat(${COLS}, 24px)`;
+
+    // Update cell sizing based on viewport
+    updateCellSizes();
+    const cellSize = getCellSize();
+    boardEl.style.gridTemplateColumns = `repeat(${COLS}, ${cellSize}px)`;
 
     for (let r = 0; r < ROWS; r++) {
       for (let c = 0; c < COLS; c++) {
@@ -495,6 +681,12 @@
         cell.className = 'cell';
         cell.dataset.row = r;
         cell.dataset.col = c;
+
+        // Apply dynamic cell size
+        cell.style.width = cellSize + 'px';
+        cell.style.height = cellSize + 'px';
+        cell.style.lineHeight = cellSize + 'px';
+        cell.style.fontSize = Math.max(10, Math.floor(cellSize * 0.58)) + 'px';
 
         if (cellData.revealed) {
           cell.classList.add('revealed');
@@ -510,10 +702,79 @@
           cell.textContent = '🚩';
         }
 
+        // ---- Mouse events (desktop) ----
         cell.addEventListener('click', (e) => handleLeftClick(r, c));
         cell.addEventListener('contextmenu', (e) => {
           e.preventDefault();
           handleRightClick(r, c);
+        });
+
+        // ---- Touch events (mobile) ----
+        cell.addEventListener('touchstart', (e) => {
+          if (gameOver || gameWon) return;
+          e.preventDefault(); // Prevent click event, double-tap zoom, and long-press menu
+
+          const targetCell = e.currentTarget;
+          touchStartRow = parseInt(targetCell.dataset.row);
+          touchStartCol = parseInt(targetCell.dataset.col);
+          touchStartTime = Date.now();
+          isLongPress = false;
+
+          clearLongPressTimer();
+          longPressTimer = setTimeout(() => {
+            isLongPress = true;
+            targetCell.classList.add('long-press');
+            // Haptic feedback if supported
+            if (navigator.vibrate) {
+              navigator.vibrate(30);
+            }
+          }, LONG_PRESS_DURATION);
+        }, { passive: false });
+
+        cell.addEventListener('touchmove', (e) => {
+          // If finger moves significantly, cancel long press
+          if (!longPressTimer) return;
+
+          const touch = e.touches[0];
+          const target = e.currentTarget;
+          const rect = target.getBoundingClientRect();
+          const isOutside = touch.clientX < rect.left || touch.clientX > rect.right ||
+                            touch.clientY < rect.top || touch.clientY > rect.bottom;
+
+          if (isOutside) {
+            clearLongPressTimer();
+            target.classList.remove('long-press');
+          }
+        }, { passive: true });
+
+        cell.addEventListener('touchend', (e) => {
+          e.preventDefault(); // Prevent subsequent click event
+          const targetCell = e.currentTarget;
+          targetCell.classList.remove('long-press');
+          clearLongPressTimer();
+
+          const r = parseInt(targetCell.dataset.row);
+          const c = parseInt(targetCell.dataset.col);
+
+          // Only act if touch started and ended on the same cell
+          if (r === touchStartRow && c === touchStartCol && !gameOver && !gameWon) {
+            if (isLongPress) {
+              handleRightClick(r, c);
+            } else {
+              handleLeftClick(r, c);
+            }
+          }
+
+          touchStartRow = -1;
+          touchStartCol = -1;
+        }, { passive: false });
+
+        cell.addEventListener('touchcancel', (e) => {
+          const targetCell = e.currentTarget;
+          targetCell.classList.remove('long-press');
+          clearLongPressTimer();
+          touchStartRow = -1;
+          touchStartCol = -1;
         });
 
         boardEl.appendChild(cell);
@@ -643,7 +904,7 @@
     // Spawn firework bursts
     spawnFireworks();
 
-    // Hide overlay on button click or after a few seconds
+    // Hide overlay on button click
     const okBtn = document.getElementById('victory-ok-btn');
     const dismissOverlay = () => {
       overlay.classList.remove('show');
