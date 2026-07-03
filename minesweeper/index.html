@@ -751,6 +751,8 @@
           e.preventDefault(); // Prevent subsequent click event
           const targetCell = e.currentTarget;
           targetCell.classList.remove('long-press');
+
+          const wasLongPress = isLongPress; // Save before clearLongPressTimer resets it
           clearLongPressTimer();
 
           const r = parseInt(targetCell.dataset.row);
@@ -758,7 +760,7 @@
 
           // Only act if touch started and ended on the same cell
           if (r === touchStartRow && c === touchStartCol && !gameOver && !gameWon) {
-            if (isLongPress) {
+            if (wasLongPress) {
               handleRightClick(r, c);
             } else {
               handleLeftClick(r, c);
