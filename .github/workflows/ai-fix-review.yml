@@ -25,7 +25,7 @@ jobs:
        github.event.review.state == 'changes_requested') ||
       (github.event_name == 'issue_comment' &&
        github.event.comment.body == '/ai-fix-review' &&
-       contains(github.event.issue.pull_request, 'true') &&
+       github.event.issue.pull_request &&
        (github.event.comment.author_association == 'OWNER' ||
         github.event.comment.author_association == 'MEMBER' ||
         github.event.comment.author_association == 'COLLABORATOR'))
