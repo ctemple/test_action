@@ -31,11 +31,14 @@
     align-items: center;
     min-height: 100vh;
     min-height: 100dvh;
+    height: 100dvh;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    padding: 8px;
+    /* Use safe-area-aware padding for notched devices */
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
     /* Prevent pull-to-refresh and overscroll on mobile */
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: auto;
+    overflow: hidden;
   }
 
   .game-container {
@@ -44,6 +47,9 @@
     border-color: #ffffff #808080 #808080 #ffffff;
     padding: 8px;
     max-width: 100%;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
   }
 
   .title-bar {
@@ -388,32 +394,54 @@
     }
   }
 
-  /* Landscape phone: ensure game fits vertically */
-  @media (max-height: 500px) and (orientation: landscape) {
+  /* Landscape phone: ensure game fits vertically, tighten spacing */
+  @media (max-height: 600px) and (orientation: landscape) {
     body {
-      align-items: flex-start;
-      padding-top: 4px;
+      align-items: center;
+      padding: max(2px, env(safe-area-inset-top)) max(4px, env(safe-area-inset-right)) max(2px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));
+    }
+
+    .game-container {
+      padding: 3px 6px;
     }
 
     .title-bar {
       padding: 1px 4px;
-      margin-bottom: 2px;
+      margin-bottom: 1px;
       font-size: 10px;
     }
 
     .status-bar {
-      padding: 2px 6px;
-      margin-bottom: 4px;
+      padding: 1px 6px;
+      margin-bottom: 2px;
+    }
+
+    .face-btn {
+      width: 32px;
+      height: 32px;
+      min-width: 40px;
+      min-height: 40px;
+      font-size: 18px;
+      line-height: 28px;
+    }
+
+    .counter {
+      font-size: 16px;
+      min-width: 38px;
     }
 
     .instructions {
-      margin-top: 4px;
-      font-size: 10px;
+      margin-top: 2px;
+      font-size: 9px;
     }
   }
 
   /* Small screens: tighten padding */
   @media (max-width: 360px) {
+    body {
+      padding: max(4px, env(safe-area-inset-top)) max(4px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));
+    }
+
     .game-container {
       padding: 4px;
     }
@@ -517,26 +545,146 @@
     document.body.classList.add('touch-device');
   }
 
+  // ---- Web Audio API sound effects ----
+  let audioCtx = null;
+
+  function getAudioContext() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    // Resume if suspended (browser autoplay policy)
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
+  function playFlagSound() {
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+
+      // Short rising tone — "插旗" (planting)
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(660, now);        // E5
+      osc.frequency.linearRampToValueAtTime(1100, now + 0.08); // rise to C#6
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+
+      osc.start(now);
+      osc.stop(now + 0.15);
+    } catch (e) {
+      // Silently ignore — audio is non-critical
+    }
+  }
+
+  function playUnflagSound() {
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+
+      // Short falling tone — "拔旗" (pulling)
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, now);        // A5
+      osc.frequency.linearRampToValueAtTime(500, now + 0.08); // fall to B4
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+
+      osc.start(now);
+      osc.stop(now + 0.12);
+    } catch (e) {
+      // Silently ignore
+    }
+  }
+
+  function playWinSound() {
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+
+      // Ascending three-note victory jingle
+      const notes = [523, 659, 784]; // C5, E5, G5
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.type = 'triangle';
+        const t = now + i * 0.15;
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.2, t + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+
+        osc.start(t);
+        osc.stop(t + 0.2);
+      });
+    } catch (e) {
+      // Silently ignore
+    }
+  }
+
+  function playLoseSound() {
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+
+      // Descending buzz — game over
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(300, now);
+      osc.frequency.linearRampToValueAtTime(80, now + 0.5);
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.linearRampToValueAtTime(0.08, now + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+
+      osc.start(now);
+      osc.stop(now + 0.5);
+    } catch (e) {
+      // Silently ignore
+    }
+  }
+
   // ---- Responsive cell sizing ----
   function getCellSize() {
-    // Account for game-container borders (3px*2) + padding (8px*2) = 22px
-    // Plus board borders (2px*2) = 4px
-    // Plus cell borders (2px*2 per cell, content-box) — baked into per-cell calc
-    const containerOverhead = 26; // 22 + 4
-    const cellBorderWidth = 4;    // 2px * 2 sides per cell (content-box)
+    // Each cell has 2px * 2 sides of border (content-box), so total per cell = cellSize + 4px
+    const cellBorderWidth = 4;
 
-    // Constrain by viewport width
-    const maxWidth = window.innerWidth - 32; // body padding * 2
-    // Constrain by viewport height (landscape), leaving room for status/instructions
-    const maxHeight = window.innerHeight - 220;
+    // Estimate horizontal overhead:
+    //   body padding (~16px) + game-container border+padding (22px) + board border (4px)
+    const hOverhead = 48;
 
-    const maxBoardWidth = Math.min(maxWidth, maxHeight);
-    const availableForCells = maxBoardWidth - containerOverhead;
+    // Estimate vertical overhead (more in portrait, less in landscape due to media queries):
+    //   body padding + container overhead + title-bar + status-bar + board border + instructions
+    // In landscape the media query tightens these, so use a balanced estimate
+    const isLandscape = window.innerWidth > window.innerHeight && window.innerHeight < 600;
+    const vOverhead = isLandscape ? 110 : 150;
 
-    // Cell content size = (available - 9 * cellBorderWidth) / 9
-    const cellSize = Math.floor((availableForCells - COLS * cellBorderWidth) / COLS);
+    const availableWidth = window.innerWidth - hOverhead;
+    const availableHeight = window.innerHeight - vOverhead;
 
-    return Math.max(16, Math.min(24, cellSize));
+    // Cell content with/height = (available - total_cell_borders) / grid_count
+    const cellFromWidth  = Math.floor((availableWidth  - COLS * cellBorderWidth) / COLS);
+    const cellFromHeight = Math.floor((availableHeight - ROWS * cellBorderWidth) / ROWS);
+
+    // Take the smaller dimension for square cells
+    // Min 16px for readability, max 56px to avoid comically large cells on huge desktop monitors
+    return Math.max(16, Math.min(Math.min(cellFromWidth, cellFromHeight), 56));
   }
 
   function updateCellSizes() {
@@ -815,6 +963,13 @@
     cellData.flagged = !cellData.flagged;
     flaggedCount += cellData.flagged ? 1 : -1;
 
+    // Sound feedback for flag/unflag
+    if (cellData.flagged) {
+      playFlagSound();
+    } else {
+      playUnflagSound();
+    }
+
     const remaining = TOTAL_MINES - flaggedCount;
     mineCounterEl.textContent = formatNumber(remaining);
 
@@ -833,6 +988,7 @@
       gameOver = true;
       clearInterval(timerInterval);
       faceBtn.textContent = '😵';
+      playLoseSound();
       revealAllMines(r, c);
       return;
     }
@@ -874,6 +1030,7 @@
       gameWon = true;
       clearInterval(timerInterval);
       faceBtn.textContent = '😎';
+      playWinSound();
 
       // Auto-flag all remaining mines
       for (let r = 0; r < ROWS; r++) {
