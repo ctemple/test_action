@@ -151,7 +151,8 @@
     transition: border-color 0.1s ease;
   }
 
-  .cell:active:not(.revealed) {
+  .cell:active:not(.revealed),
+  .cell.pressed:not(.revealed) {
     border-color: #808080 #ffffff #ffffff #808080;
   }
 
@@ -532,6 +533,10 @@
   let isLongPress = false;
   const LONG_PRESS_DURATION = 500; // ms
 
+  // Mouse state for drag-out-to-cancel detection
+  let mouseDownRow = -1;
+  let mouseDownCol = -1;
+
   const boardEl = document.getElementById('board');
   const mineCounterEl = document.getElementById('mine-counter');
   const timerEl = document.getElementById('timer');
@@ -852,7 +857,34 @@
         }
 
         // ---- Mouse events (desktop) ----
-        cell.addEventListener('click', (e) => handleLeftClick(r, c));
+        // Replace click with mousedown+mouseup for drag-out-to-cancel support
+        cell.addEventListener('mousedown', (e) => {
+          if (e.button !== 0) return; // left button only
+          if (gameOver || gameWon) return;
+          const cd = board[r][c];
+          if (cd.revealed || cd.flagged) return;
+          mouseDownRow = r;
+          mouseDownCol = c;
+        });
+
+        cell.addEventListener('mouseup', (e) => {
+          if (e.button !== 0) return;
+          if (mouseDownRow < 0 || mouseDownCol < 0) return;
+
+          // Determine which cell the mouse is over at release time
+          const targetEl = document.elementFromPoint(e.clientX, e.clientY);
+          if (targetEl && targetEl.classList.contains('cell')) {
+            const upRow = parseInt(targetEl.dataset.row);
+            const upCol = parseInt(targetEl.dataset.col);
+            if (upRow === mouseDownRow && upCol === mouseDownCol) {
+              handleLeftClick(upRow, upCol);
+            }
+          }
+
+          mouseDownRow = -1;
+          mouseDownCol = -1;
+        });
+
         cell.addEventListener('contextmenu', (e) => {
           e.preventDefault();
           handleRightClick(r, c);
@@ -869,6 +901,9 @@
           touchStartTime = Date.now();
           isLongPress = false;
 
+          // Visual feedback: show pressed state
+          targetCell.classList.add('pressed');
+
           clearLongPressTimer();
           longPressTimer = setTimeout(() => {
             isLongPress = true;
@@ -881,18 +916,23 @@
         }, { passive: false });
 
         cell.addEventListener('touchmove', (e) => {
-          // If finger moves significantly, cancel long press
-          if (!longPressTimer) return;
-
           const touch = e.touches[0];
           const target = e.currentTarget;
           const rect = target.getBoundingClientRect();
           const isOutside = touch.clientX < rect.left || touch.clientX > rect.right ||
                             touch.clientY < rect.top || touch.clientY > rect.bottom;
 
-          if (isOutside) {
+          // Cancel long press if finger moves outside the cell
+          if (isOutside && longPressTimer) {
             clearLongPressTimer();
             target.classList.remove('long-press');
+          }
+
+          // Visual feedback: toggle pressed state based on finger position
+          if (isOutside) {
+            target.classList.remove('pressed');
+          } else {
+            target.classList.add('pressed');
           }
         }, { passive: true });
 
@@ -900,12 +940,24 @@
           e.preventDefault(); // Prevent subsequent click event
           const targetCell = e.currentTarget;
           targetCell.classList.remove('long-press');
+          targetCell.classList.remove('pressed');
 
           const wasLongPress = isLongPress; // Save before clearLongPressTimer resets it
           clearLongPressTimer();
 
-          const r = parseInt(targetCell.dataset.row);
-          const c = parseInt(targetCell.dataset.col);
+          // Use touch end position to determine which cell the finger is actually over
+          const touch = e.changedTouches[0];
+          const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+
+          if (!targetEl || !targetEl.classList.contains('cell')) {
+            // Touch ended outside any cell — cancel the action
+            touchStartRow = -1;
+            touchStartCol = -1;
+            return;
+          }
+
+          const r = parseInt(targetEl.dataset.row);
+          const c = parseInt(targetEl.dataset.col);
 
           // Only act if touch started and ended on the same cell
           if (r === touchStartRow && c === touchStartCol && !gameOver && !gameWon) {
@@ -923,6 +975,7 @@
         cell.addEventListener('touchcancel', (e) => {
           const targetCell = e.currentTarget;
           targetCell.classList.remove('long-press');
+          targetCell.classList.remove('pressed');
           clearLongPressTimer();
           touchStartRow = -1;
           touchStartCol = -1;
