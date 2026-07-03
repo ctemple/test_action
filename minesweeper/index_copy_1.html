@@ -1,0 +1,1241 @@
+<!DOCTYPE html>
+<html lang="zh-CN" style="color-scheme: light;">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="color-scheme" content="light">
+<title>扫雷 - Minesweeper</title>
+<style>
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    color-scheme: light;
+  }
+
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  body {
+    color-scheme: light;
+    background-color: #c0c0c0;
+    color: #000;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    min-height: 100dvh;
+    height: 100dvh;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    /* Use safe-area-aware padding for notched devices */
+    padding: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+    /* Prevent pull-to-refresh and overscroll on mobile */
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: auto;
+    overflow: hidden;
+  }
+
+  .game-container {
+    background-color: #c0c0c0;
+    border: 3px solid;
+    border-color: #ffffff #808080 #808080 #ffffff;
+    padding: 8px;
+    max-width: 100%;
+    max-height: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .title-bar {
+    background: linear-gradient(90deg, #000080, #1084d0);
+    color: #ffffff;
+    padding: 3px 4px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+  }
+
+  .title-bar-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 4px;
+    background-color: #c0c0c0;
+    display: inline-block;
+  }
+
+  .status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 6px;
+    margin-bottom: 6px;
+    border: 2px solid;
+    border-color: #808080 #ffffff #ffffff #808080;
+    background-color: #c0c0c0;
+  }
+
+  .counter {
+    background-color: #000;
+    color: #ff0000;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: clamp(20px, 5vw, 28px);
+    font-weight: bold;
+    padding: 2px 4px;
+    min-width: 48px;
+    text-align: center;
+    border: 2px solid;
+    border-color: #808080 #ffffff #ffffff #808080;
+    line-height: 1;
+    letter-spacing: 2px;
+  }
+
+  .face-btn {
+    width: 40px;
+    height: 40px;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 24px;
+    line-height: 36px;
+    text-align: center;
+    cursor: pointer;
+    border: 2px solid;
+    border-color: #ffffff #808080 #808080 #ffffff;
+    background-color: #c0c0c0;
+    color: #000;
+    outline: none;
+    touch-action: manipulation;
+  }
+
+  .face-btn:active {
+    border-color: #808080 #ffffff #ffffff #808080;
+  }
+
+  .board {
+    display: inline-grid;
+    border: 2px solid;
+    border-color: #808080 #ffffff #ffffff #808080;
+    gap: 0;
+    background-color: #c0c0c0;
+    touch-action: manipulation;
+  }
+
+  .cell {
+    width: var(--cell-size, 24px);
+    height: var(--cell-size, 24px);
+    font-size: calc(var(--cell-size, 24px) * 0.58);
+    font-weight: bold;
+    text-align: center;
+    line-height: var(--cell-size, 24px);
+    cursor: pointer;
+    border: 2px solid;
+    border-color: #ffffff #808080 #808080 #ffffff;
+    background-color: #c0c0c0;
+    color: #000;
+    outline: none;
+    box-sizing: content-box;
+    touch-action: manipulation;
+    /* Prevent iOS tap highlight */
+    -webkit-tap-highlight-color: transparent;
+    /* Prevent context menu on long press */
+    -webkit-touch-callout: none;
+    /* Smooth transition for long-press feedback */
+    transition: border-color 0.1s ease;
+  }
+
+  .cell:active:not(.revealed),
+  .cell.pressed:not(.revealed) {
+    border-color: #808080 #ffffff #ffffff #808080;
+  }
+
+  /* Long-press visual feedback (touch flagging) */
+  .cell.long-press {
+    border-color: #808080 #ffffff #ffffff #808080;
+    background-color: #b0b0b0;
+  }
+
+  .cell.revealed {
+    border: 1px solid #808080;
+    background-color: #c0c0c0;
+    cursor: default;
+    color: #000;
+  }
+
+  .cell.flagged {
+    border-color: #ffffff #808080 #808080 #ffffff;
+  }
+
+  .cell.mine-exploded {
+    background-color: #ff0000;
+    border: 1px solid #808080;
+  }
+
+  .cell.wrong-flag {
+    border: 1px solid #808080;
+    background-color: #c0c0c0;
+    text-decoration: line-through;
+  }
+
+  /* Number colors matching Windows Minesweeper — .cell prefix gives these equal
+     specificity to .cell.revealed (0,2,0) so cascade order decides: these win. */
+  .cell.num-1 { color: #0000ff; }
+  .cell.num-2 { color: #008000; }
+  .cell.num-3 { color: #ff0000; }
+  .cell.num-4 { color: #000080; }
+  .cell.num-5 { color: #800000; }
+  .cell.num-6 { color: #008080; }
+  .cell.num-7 { color: #000000; }
+  .cell.num-8 { color: #808080; }
+
+  .instructions {
+    margin-top: 8px;
+    font-size: 11px;
+    color: #000;
+    text-align: center;
+    line-height: 1.4;
+  }
+
+  .instructions-desktop {
+    display: inline;
+  }
+
+  .instructions-mobile {
+    display: none;
+  }
+
+  /* Show mobile instructions on touch devices (detected via JS) */
+  body.touch-device .instructions-desktop {
+    display: none;
+  }
+
+  body.touch-device .instructions-mobile {
+    display: inline;
+  }
+
+  /* Victory overlay */
+  .victory-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.4);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    animation: fadeIn 0.3s ease-out;
+    padding: 16px;
+  }
+
+  .victory-overlay.show {
+    display: flex;
+  }
+
+  .victory-dialog {
+    background-color: #c0c0c0;
+    border: 3px solid;
+    border-color: #ffffff #808080 #808080 #ffffff;
+    padding: 2px;
+    min-width: min(280px, 90vw);
+    max-width: 90vw;
+    animation: dialogPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 4px 4px 0px rgba(0, 0, 0, 0.3);
+  }
+
+  .victory-title-bar {
+    background: linear-gradient(90deg, #000080, #1084d0);
+    color: #ffffff;
+    padding: 3px 6px;
+    font-size: 12px;
+    font-weight: bold;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .victory-body {
+    padding: 16px 20px 12px;
+    text-align: center;
+    background-color: #c0c0c0;
+    color: #000;
+  }
+
+  .victory-icon {
+    font-size: 48px;
+    display: block;
+    margin-bottom: 8px;
+    animation: trophyBounce 0.6s ease-out 0.3s both;
+  }
+
+  .victory-title {
+    font-size: 16px;
+    font-weight: bold;
+    color: #000080;
+    margin-bottom: 4px;
+  }
+
+  .victory-subtitle {
+    font-size: 12px;
+    color: #000;
+    margin-bottom: 14px;
+  }
+
+  .victory-btn {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    font-size: 14px;
+    font-weight: bold;
+    padding: 8px 24px;
+    min-width: 75px;
+    min-height: 44px;
+    cursor: pointer;
+    border: 2px solid;
+    border-color: #ffffff #808080 #808080 #ffffff;
+    background-color: #c0c0c0;
+    color: #000;
+    outline: none;
+    touch-action: manipulation;
+  }
+
+  .victory-btn:active {
+    border-color: #808080 #ffffff #ffffff #808080;
+  }
+
+  /* Confetti / fireworks particles */
+  .confetti-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 1001;
+    overflow: hidden;
+  }
+
+  .confetti-particle {
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    opacity: 0;
+    animation: confettiFall var(--fall-duration, 2.5s) ease-out forwards;
+  }
+
+  @keyframes confettiFall {
+    0% {
+      opacity: 1;
+      transform: translate(0, 0) rotate(0deg) scale(1);
+    }
+    15% {
+      opacity: 1;
+      transform: translate(var(--drift-x1), var(--rise, -120px)) rotate(var(--spin1, 180deg)) scale(1.2);
+    }
+    50% {
+      opacity: 0.9;
+      transform: translate(var(--drift-x2), calc(var(--rise, -120px) + 200px)) rotate(var(--spin2, 360deg)) scale(0.9);
+    }
+    85% {
+      opacity: 0.4;
+      transform: translate(var(--drift-x3), calc(var(--rise, -120px) + 380px)) rotate(var(--spin3, 540deg)) scale(0.6);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(var(--drift-x4), calc(var(--rise, -120px) + 500px)) rotate(var(--spin4, 720deg)) scale(0.2);
+    }
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes dialogPop {
+    from { transform: scale(0.5); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+  }
+
+  @keyframes trophyBounce {
+    0% { transform: scale(0) rotate(-20deg); }
+    50% { transform: scale(1.3) rotate(10deg); }
+    100% { transform: scale(1) rotate(0deg); }
+  }
+
+  /* Firework burst effect */
+  .firework-burst {
+    position: fixed;
+    pointer-events: none;
+    z-index: 1002;
+    width: 0;
+    height: 0;
+  }
+
+  .firework-spark {
+    position: absolute;
+    width: 6px;
+    height: 6px;
+    border-radius: 0;
+    animation: sparkFly 1.5s ease-out forwards;
+  }
+
+  @keyframes sparkFly {
+    0% {
+      opacity: 1;
+      transform: translate(0, 0) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(var(--sx), var(--sy)) scale(0);
+    }
+  }
+
+  /* Landscape phone: ensure game fits vertically, tighten spacing */
+  @media (max-height: 600px) and (orientation: landscape) {
+    body {
+      align-items: center;
+      padding: max(2px, env(safe-area-inset-top)) max(4px, env(safe-area-inset-right)) max(2px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));
+    }
+
+    .game-container {
+      padding: 3px 6px;
+    }
+
+    .title-bar {
+      padding: 1px 4px;
+      margin-bottom: 1px;
+      font-size: 10px;
+    }
+
+    .status-bar {
+      padding: 1px 6px;
+      margin-bottom: 2px;
+    }
+
+    .face-btn {
+      width: 32px;
+      height: 32px;
+      min-width: 40px;
+      min-height: 40px;
+      font-size: 18px;
+      line-height: 28px;
+    }
+
+    .counter {
+      font-size: 16px;
+      min-width: 38px;
+    }
+
+    .instructions {
+      margin-top: 2px;
+      font-size: 9px;
+    }
+  }
+
+  /* Small screens: tighten padding */
+  @media (max-width: 360px) {
+    body {
+      padding: max(4px, env(safe-area-inset-top)) max(4px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom)) max(4px, env(safe-area-inset-left));
+    }
+
+    .game-container {
+      padding: 4px;
+    }
+
+    .status-bar {
+      padding: 3px 4px;
+    }
+
+    .counter {
+      font-size: 18px;
+      min-width: 42px;
+      padding: 1px 3px;
+    }
+
+    .face-btn {
+      width: 36px;
+      height: 36px;
+      min-width: 44px;
+      min-height: 44px;
+      font-size: 20px;
+      line-height: 32px;
+    }
+  }
+</style>
+</head>
+<body>
+
+<div class="game-container">
+  <div class="title-bar">
+    <span class="title-bar-icon"></span>
+    扫雷
+  </div>
+
+  <div class="status-bar">
+    <div class="counter" id="mine-counter">010</div>
+    <button class="face-btn" id="face-btn" title="新游戏">🙂</button>
+    <div class="counter" id="timer">000</div>
+  </div>
+
+  <div class="board" id="board"></div>
+
+  <div class="instructions">
+    <span class="instructions-desktop">左键翻开 | 右键标记/取消旗帜 🚩</span>
+    <span class="instructions-mobile">点按翻开 | 长按标记/取消旗帜 🚩</span>
+  </div>
+</div>
+
+<!-- Victory overlay -->
+<div class="victory-overlay" id="victory-overlay">
+  <div class="victory-dialog">
+    <div class="victory-title-bar">
+      <span>扫雷</span>
+      <span>✕</span>
+    </div>
+    <div class="victory-body">
+      <span class="victory-icon">🏆</span>
+      <div class="victory-title">恭喜你赢了！</div>
+      <div class="victory-subtitle" id="victory-time"></div>
+      <button class="victory-btn" id="victory-ok-btn">确定</button>
+    </div>
+  </div>
+</div>
+
+<div class="confetti-container" id="confetti-container"></div>
+
+<script>
+(function() {
+  // Game configuration
+  const ROWS = 9;
+  const COLS = 9;
+  const TOTAL_MINES = 10;
+
+  const board = [];
+  let gameOver = false;
+  let gameWon = false;
+  let firstClick = true;
+  let flaggedCount = 0;
+  let revealedCount = 0;
+  let timerInterval = null;
+  let seconds = 0;
+
+  // Touch state for long-press detection
+  let touchStartTime = 0;
+  let touchStartRow = -1;
+  let touchStartCol = -1;
+  let longPressTimer = null;
+  let isLongPress = false;
+  const LONG_PRESS_DURATION = 500; // ms
+
+  // Mouse state for drag-out-to-cancel detection
+  let mouseDownRow = -1;
+  let mouseDownCol = -1;
+
+  const boardEl = document.getElementById('board');
+  const mineCounterEl = document.getElementById('mine-counter');
+  const timerEl = document.getElementById('timer');
+  const faceBtn = document.getElementById('face-btn');
+
+  // ---- Touch device detection ----
+  const isTouchDevice = ('ontouchstart' in window) ||
+    (navigator.maxTouchPoints > 0) ||
+    (navigator.msMaxTouchPoints > 0);
+
+  if (isTouchDevice) {
+    document.body.classList.add('touch-device');
+  }
+
+  // ---- Web Audio API sound effects ----
+  let audioCtx = null;
+
+  function getAudioContext() {
+    if (!audioCtx) {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    }
+    // Resume if suspended (browser autoplay policy)
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume();
+    }
+    return audioCtx;
+  }
+
+  function playFlagSound() {
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+
+      // Short rising tone — "插旗" (planting)
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(660, now);        // E5
+      osc.frequency.linearRampToValueAtTime(1100, now + 0.08); // rise to C#6
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+
+      osc.start(now);
+      osc.stop(now + 0.15);
+    } catch (e) {
+      // Silently ignore — audio is non-critical
+    }
+  }
+
+  function playUnflagSound() {
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+
+      // Short falling tone — "拔旗" (pulling)
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, now);        // A5
+      osc.frequency.linearRampToValueAtTime(500, now + 0.08); // fall to B4
+      gain.gain.setValueAtTime(0.25, now);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.12);
+
+      osc.start(now);
+      osc.stop(now + 0.12);
+    } catch (e) {
+      // Silently ignore
+    }
+  }
+
+  function playWinSound() {
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+
+      // Ascending three-note victory jingle
+      const notes = [523, 659, 784]; // C5, E5, G5
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.type = 'triangle';
+        const t = now + i * 0.15;
+        osc.frequency.setValueAtTime(freq, t);
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.2, t + 0.03);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+
+        osc.start(t);
+        osc.stop(t + 0.2);
+      });
+    } catch (e) {
+      // Silently ignore
+    }
+  }
+
+  function playLoseSound() {
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+
+      // Descending buzz — game over
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(300, now);
+      osc.frequency.linearRampToValueAtTime(80, now + 0.5);
+      gain.gain.setValueAtTime(0.12, now);
+      gain.gain.linearRampToValueAtTime(0.08, now + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
+
+      osc.start(now);
+      osc.stop(now + 0.5);
+    } catch (e) {
+      // Silently ignore
+    }
+  }
+
+  // ---- Responsive cell sizing ----
+  function getCellSize() {
+    // Each cell has 2px * 2 sides of border (content-box), so total per cell = cellSize + 4px
+    const cellBorderWidth = 4;
+
+    // Estimate horizontal overhead:
+    //   body padding (~16px) + game-container border+padding (22px) + board border (4px)
+    const hOverhead = 48;
+
+    // Estimate vertical overhead (more in portrait, less in landscape due to media queries):
+    //   body padding + container overhead + title-bar + status-bar + board border + instructions
+    // In landscape the media query tightens these, so use a balanced estimate
+    const isLandscape = window.innerWidth > window.innerHeight && window.innerHeight < 600;
+    const vOverhead = isLandscape ? 110 : 150;
+
+    const availableWidth = window.innerWidth - hOverhead;
+    const availableHeight = window.innerHeight - vOverhead;
+
+    // Cell content with/height = (available - total_cell_borders) / grid_count
+    const cellFromWidth  = Math.floor((availableWidth  - COLS * cellBorderWidth) / COLS);
+    const cellFromHeight = Math.floor((availableHeight - ROWS * cellBorderWidth) / ROWS);
+
+    // Take the smaller dimension for square cells
+    // Min 16px for readability, max 56px to avoid comically large cells on huge desktop monitors
+    return Math.max(16, Math.min(Math.min(cellFromWidth, cellFromHeight), 56));
+  }
+
+  function updateCellSizes() {
+    const cellSize = getCellSize();
+    boardEl.style.setProperty('--cell-size', cellSize + 'px');
+  }
+
+  // Recalculate on resize (debounced)
+  let resizeTimeout;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(updateCellSizes, 150);
+  });
+
+  // Also recalculate on orientation change
+  window.addEventListener('orientationchange', () => {
+    setTimeout(updateCellSizes, 300);
+  });
+
+  // ---- Game logic ----
+  function initBoard() {
+    // Clear previous state
+    clearInterval(timerInterval);
+    timerInterval = null;
+    seconds = 0;
+    gameOver = false;
+    gameWon = false;
+    firstClick = true;
+    flaggedCount = 0;
+    revealedCount = 0;
+
+    // Clear touch state
+    clearLongPressTimer();
+
+    // Hide victory overlay
+    const overlay = document.getElementById('victory-overlay');
+    if (overlay) overlay.classList.remove('show');
+
+    // Clear confetti
+    const confettiContainer = document.getElementById('confetti-container');
+    if (confettiContainer) confettiContainer.innerHTML = '';
+
+    timerEl.textContent = '000';
+    mineCounterEl.textContent = formatNumber(TOTAL_MINES);
+    faceBtn.textContent = '🙂';
+
+    board.length = 0;
+    for (let r = 0; r < ROWS; r++) {
+      board[r] = [];
+      for (let c = 0; c < COLS; c++) {
+        board[r][c] = {
+          mine: false,
+          revealed: false,
+          flagged: false,
+          adjacentMines: 0
+        };
+      }
+    }
+
+    renderBoard();
+  }
+
+  function placeMines(safeRow, safeCol) {
+    const safeCells = new Set();
+    // Protect the clicked cell and its neighbors
+    for (let dr = -1; dr <= 1; dr++) {
+      for (let dc = -1; dc <= 1; dc++) {
+        const nr = safeRow + dr;
+        const nc = safeCol + dc;
+        if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) {
+          safeCells.add(nr * COLS + nc);
+        }
+      }
+    }
+
+    let minesPlaced = 0;
+    while (minesPlaced < TOTAL_MINES) {
+      const idx = Math.floor(Math.random() * (ROWS * COLS));
+      const r = Math.floor(idx / COLS);
+      const c = idx % COLS;
+
+      if (board[r][c].mine) continue;
+      if (safeCells.has(idx)) continue;
+
+      board[r][c].mine = true;
+      minesPlaced++;
+    }
+
+    // Calculate adjacent mine counts
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (board[r][c].mine) continue;
+        let count = 0;
+        for (let dr = -1; dr <= 1; dr++) {
+          for (let dc = -1; dc <= 1; dc++) {
+            if (dr === 0 && dc === 0) continue;
+            const nr = r + dr;
+            const nc = c + dc;
+            if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && board[nr][nc].mine) {
+              count++;
+            }
+          }
+        }
+        board[r][c].adjacentMines = count;
+      }
+    }
+  }
+
+  function startTimer() {
+    if (timerInterval) return;
+    timerInterval = setInterval(() => {
+      seconds++;
+      if (seconds > 999) seconds = 999;
+      timerEl.textContent = formatNumber(seconds);
+    }, 1000);
+  }
+
+  function formatNumber(n) {
+    return String(n).padStart(3, '0');
+  }
+
+  function clearLongPressTimer() {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      longPressTimer = null;
+    }
+    isLongPress = false;
+  }
+
+  function renderBoard() {
+    boardEl.innerHTML = '';
+
+    // Update cell sizing based on viewport
+    updateCellSizes();
+    const cellSize = getCellSize();
+    boardEl.style.gridTemplateColumns = `repeat(${COLS}, ${cellSize}px)`;
+
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const cellData = board[r][c];
+        const cell = document.createElement('div');
+        cell.className = 'cell';
+        cell.dataset.row = r;
+        cell.dataset.col = c;
+
+        // Apply dynamic cell size
+        cell.style.width = cellSize + 'px';
+        cell.style.height = cellSize + 'px';
+        cell.style.lineHeight = cellSize + 'px';
+        cell.style.fontSize = Math.max(10, Math.floor(cellSize * 0.58)) + 'px';
+
+        if (cellData.revealed) {
+          cell.classList.add('revealed');
+          if (cellData.mine) {
+            cell.classList.add('mine-exploded');
+            cell.textContent = '💣';
+          } else if (cellData.adjacentMines > 0) {
+            cell.textContent = cellData.adjacentMines;
+            cell.classList.add('num-' + cellData.adjacentMines);
+          }
+        } else if (cellData.flagged) {
+          cell.classList.add('flagged');
+          cell.textContent = '🚩';
+        }
+
+        // ---- Mouse events (desktop) ----
+        // Replace click with mousedown+mouseup for drag-out-to-cancel support
+        cell.addEventListener('mousedown', (e) => {
+          if (e.button !== 0) return; // left button only
+          if (gameOver || gameWon) return;
+          const cd = board[r][c];
+          if (cd.revealed || cd.flagged) return;
+          mouseDownRow = r;
+          mouseDownCol = c;
+        });
+
+        cell.addEventListener('mouseup', (e) => {
+          if (e.button !== 0) return;
+          if (mouseDownRow < 0 || mouseDownCol < 0) return;
+
+          // Determine which cell the mouse is over at release time
+          const targetEl = document.elementFromPoint(e.clientX, e.clientY);
+          if (targetEl && targetEl.classList.contains('cell')) {
+            const upRow = parseInt(targetEl.dataset.row);
+            const upCol = parseInt(targetEl.dataset.col);
+            if (upRow === mouseDownRow && upCol === mouseDownCol) {
+              handleLeftClick(upRow, upCol);
+            }
+          }
+
+          mouseDownRow = -1;
+          mouseDownCol = -1;
+        });
+
+        cell.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          handleRightClick(r, c);
+        });
+
+        // ---- Touch events (mobile) ----
+        cell.addEventListener('touchstart', (e) => {
+          if (gameOver || gameWon) return;
+          e.preventDefault(); // Prevent click event, double-tap zoom, and long-press menu
+
+          const targetCell = e.currentTarget;
+          touchStartRow = parseInt(targetCell.dataset.row);
+          touchStartCol = parseInt(targetCell.dataset.col);
+          touchStartTime = Date.now();
+          isLongPress = false;
+
+          // Visual feedback: show pressed state
+          targetCell.classList.add('pressed');
+
+          clearLongPressTimer();
+          longPressTimer = setTimeout(() => {
+            isLongPress = true;
+            targetCell.classList.add('long-press');
+            // Haptic feedback if supported
+            if (navigator.vibrate) {
+              navigator.vibrate(30);
+            }
+          }, LONG_PRESS_DURATION);
+        }, { passive: false });
+
+        cell.addEventListener('touchmove', (e) => {
+          const touch = e.touches[0];
+          const target = e.currentTarget;
+          const rect = target.getBoundingClientRect();
+          const isOutside = touch.clientX < rect.left || touch.clientX > rect.right ||
+                            touch.clientY < rect.top || touch.clientY > rect.bottom;
+
+          // Cancel long press if finger moves outside the cell
+          if (isOutside && longPressTimer) {
+            clearLongPressTimer();
+            target.classList.remove('long-press');
+          }
+
+          // Visual feedback: toggle pressed state based on finger position
+          if (isOutside) {
+            target.classList.remove('pressed');
+          } else {
+            target.classList.add('pressed');
+          }
+        }, { passive: true });
+
+        cell.addEventListener('touchend', (e) => {
+          e.preventDefault(); // Prevent subsequent click event
+          const targetCell = e.currentTarget;
+          targetCell.classList.remove('long-press');
+          targetCell.classList.remove('pressed');
+
+          const wasLongPress = isLongPress; // Save before clearLongPressTimer resets it
+          clearLongPressTimer();
+
+          // Use touch end position to determine which cell the finger is actually over
+          const touch = e.changedTouches[0];
+          const targetEl = document.elementFromPoint(touch.clientX, touch.clientY);
+
+          if (!targetEl || !targetEl.classList.contains('cell')) {
+            // Touch ended outside any cell — cancel the action
+            touchStartRow = -1;
+            touchStartCol = -1;
+            return;
+          }
+
+          const r = parseInt(targetEl.dataset.row);
+          const c = parseInt(targetEl.dataset.col);
+
+          // Only act if touch started and ended on the same cell
+          if (r === touchStartRow && c === touchStartCol && !gameOver && !gameWon) {
+            if (wasLongPress) {
+              handleRightClick(r, c);
+            } else {
+              handleLeftClick(r, c);
+            }
+          }
+
+          touchStartRow = -1;
+          touchStartCol = -1;
+        }, { passive: false });
+
+        cell.addEventListener('touchcancel', (e) => {
+          const targetCell = e.currentTarget;
+          targetCell.classList.remove('long-press');
+          targetCell.classList.remove('pressed');
+          clearLongPressTimer();
+          touchStartRow = -1;
+          touchStartCol = -1;
+        });
+
+        boardEl.appendChild(cell);
+      }
+    }
+  }
+
+  function getCellElement(r, c) {
+    return boardEl.querySelector(`[data-row="${r}"][data-col="${c}"]`);
+  }
+
+  function handleLeftClick(r, c) {
+    if (gameOver || gameWon) return;
+    const cellData = board[r][c];
+    if (cellData.revealed || cellData.flagged) return;
+
+    if (firstClick) {
+      firstClick = false;
+      placeMines(r, c);
+      startTimer();
+    }
+
+    reveal(r, c);
+
+    if (!gameOver && !gameWon) {
+      checkWin();
+    }
+    renderBoard();
+  }
+
+  function handleRightClick(r, c) {
+    if (gameOver || gameWon) return;
+    const cellData = board[r][c];
+    if (cellData.revealed) return;
+
+    cellData.flagged = !cellData.flagged;
+    flaggedCount += cellData.flagged ? 1 : -1;
+
+    // Sound feedback for flag/unflag
+    if (cellData.flagged) {
+      playFlagSound();
+    } else {
+      playUnflagSound();
+    }
+
+    const remaining = TOTAL_MINES - flaggedCount;
+    mineCounterEl.textContent = formatNumber(remaining);
+
+    renderBoard();
+  }
+
+  function reveal(r, c) {
+    const cellData = board[r][c];
+    if (cellData.revealed || cellData.flagged) return;
+
+    cellData.revealed = true;
+    revealedCount++;
+
+    if (cellData.mine) {
+      // Game over
+      gameOver = true;
+      clearInterval(timerInterval);
+      faceBtn.textContent = '😵';
+      playLoseSound();
+      revealAllMines(r, c);
+      return;
+    }
+
+    // Flood fill for empty cells
+    if (cellData.adjacentMines === 0) {
+      for (let dr = -1; dr <= 1; dr++) {
+        for (let dc = -1; dc <= 1; dc++) {
+          if (dr === 0 && dc === 0) continue;
+          const nr = r + dr;
+          const nc = c + dc;
+          if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) {
+            reveal(nr, nc);
+          }
+        }
+      }
+    }
+  }
+
+  function revealAllMines(explodedRow, explodedCol) {
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const cellData = board[r][c];
+        if (cellData.mine && !cellData.flagged) {
+          cellData.revealed = true;
+        }
+        // Mark wrong flags
+        if (cellData.flagged && !cellData.mine) {
+          cellData.revealed = true;
+          getCellElement(r, c)?.classList.add('wrong-flag');
+        }
+      }
+    }
+  }
+
+  function checkWin() {
+    const totalCells = ROWS * COLS;
+    if (revealedCount === totalCells - TOTAL_MINES) {
+      gameWon = true;
+      clearInterval(timerInterval);
+      faceBtn.textContent = '😎';
+      playWinSound();
+
+      // Auto-flag all remaining mines
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const cellData = board[r][c];
+          if (cellData.mine && !cellData.flagged) {
+            cellData.flagged = true;
+          }
+        }
+      }
+      mineCounterEl.textContent = '000';
+
+      // Trigger victory celebration
+      setTimeout(() => {
+        triggerVictoryCelebration();
+      }, 200);
+    }
+  }
+
+  function triggerVictoryCelebration() {
+    // Show victory dialog
+    const overlay = document.getElementById('victory-overlay');
+    const timeEl = document.getElementById('victory-time');
+    timeEl.textContent = '用时 ' + seconds + ' 秒';
+    overlay.classList.add('show');
+
+    // Spawn confetti particles
+    spawnConfetti();
+
+    // Spawn firework bursts
+    spawnFireworks();
+
+    // Hide overlay on button click
+    const okBtn = document.getElementById('victory-ok-btn');
+    const dismissOverlay = () => {
+      overlay.classList.remove('show');
+      okBtn.removeEventListener('click', dismissOverlay);
+    };
+    okBtn.addEventListener('click', dismissOverlay);
+
+    // Also allow clicking the overlay background to dismiss
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        dismissOverlay();
+      }
+    });
+  }
+
+  function spawnConfetti() {
+    const container = document.getElementById('confetti-container');
+    const colors = [
+      '#ff0000', '#0000ff', '#008000', '#ffff00', '#ff00ff',
+      '#00ffff', '#ff8800', '#000080', '#800000', '#008080',
+      '#ffffff', '#ffcc00', '#00ff00', '#ff0066', '#00ccff'
+    ];
+
+    for (let i = 0; i < 80; i++) {
+      const particle = document.createElement('div');
+      particle.className = 'confetti-particle';
+
+      const startX = Math.random() * 100;
+      const drift = (Math.random() - 0.5) * 400;
+      const fallDuration = 2.5 + Math.random() * 2.0;
+      const delay = Math.random() * 0.5;
+
+      particle.style.cssText = `
+        left: ${startX}%;
+        top: -20px;
+        background-color: ${colors[Math.floor(Math.random() * colors.length)]};
+        --fall-duration: ${fallDuration}s;
+        --drift-x1: ${drift * 0.3}px;
+        --drift-x2: ${drift * 0.6}px;
+        --drift-x3: ${drift * 0.8}px;
+        --drift-x4: ${drift}px;
+        --rise: ${-80 - Math.random() * 80}px;
+        --spin1: ${Math.random() * 360}deg;
+        --spin2: ${Math.random() * 720}deg;
+        --spin3: ${Math.random() * 1080}deg;
+        --spin4: ${Math.random() * 1440}deg;
+        animation-delay: ${delay}s;
+        width: ${6 + Math.random() * 10}px;
+        height: ${6 + Math.random() * 10}px;
+      `;
+
+      container.appendChild(particle);
+
+      // Clean up after animation
+      setTimeout(() => {
+        if (particle.parentNode) {
+          particle.parentNode.removeChild(particle);
+        }
+      }, (fallDuration + delay) * 1000 + 200);
+    }
+  }
+
+  function spawnFireworks() {
+    const container = document.getElementById('confetti-container');
+    const colors = ['#ff0000', '#ffff00', '#00ff00', '#00ffff', '#ff00ff',
+                     '#ff8800', '#ffffff', '#0088ff'];
+
+    // Spawn 3 firework bursts at staggered times
+    const bursts = [
+      { x: 30, y: 30, delay: 400 },
+      { x: 70, y: 25, delay: 700 },
+      { x: 50, y: 40, delay: 1000 }
+    ];
+
+    bursts.forEach(burst => {
+      setTimeout(() => {
+        const burstEl = document.createElement('div');
+        burstEl.className = 'firework-burst';
+        burstEl.style.left = burst.x + '%';
+        burstEl.style.top = burst.y + '%';
+
+        const sparkCount = 24;
+        for (let i = 0; i < sparkCount; i++) {
+          const spark = document.createElement('div');
+          spark.className = 'firework-spark';
+          const angle = (i / sparkCount) * Math.PI * 2;
+          const distance = 60 + Math.random() * 80;
+          const sx = Math.cos(angle) * distance;
+          const sy = Math.sin(angle) * distance;
+          spark.style.cssText = `
+            background-color: ${colors[Math.floor(Math.random() * colors.length)]};
+            --sx: ${sx}px;
+            --sy: ${sy}px;
+            width: ${4 + Math.random() * 6}px;
+            height: ${4 + Math.random() * 6}px;
+            animation-duration: ${1.0 + Math.random() * 0.8}s;
+          `;
+          burstEl.appendChild(spark);
+        }
+
+        container.appendChild(burstEl);
+
+        // Clean up after animation
+        setTimeout(() => {
+          if (burstEl.parentNode) {
+            burstEl.parentNode.removeChild(burstEl);
+          }
+        }, 2000);
+      }, burst.delay);
+    });
+  }
+
+  // Face button click - restart
+  faceBtn.addEventListener('click', initBoard);
+
+  // Initialize game on load
+  initBoard();
+})();
+</script>
+</body>
+</html>
